@@ -1,0 +1,933 @@
+import 'package:flutter/material.dart';
+import '../../core/models/course.dart';
+import '../course/add_course_screen.dart';
+import 'package:provider/provider.dart';
+import '../../core/providers/course_provider.dart';
+import '../../core/db/database_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../settings/schedule_management_screen.dart'; // Added import for management screen
+
+class ScheduleGrid extends StatelessWidget {
+  final List<Course> courses;
+  final int currentWeek;
+  final DateTime? startDate; // Added start date for date calculation
+
+  static const List<String> startTimes = [
+    "8:00",
+    "8:55",
+    "10:00",
+    "10:55",
+    "12:00",
+    "12:55",
+    "14:00",
+    "14:55",
+    "16:00",
+    "16:55",
+    "18:00",
+    "18:55",
+    "20:00",
+    "20:55",
+  ];
+
+  static const List<String> endTimes = [
+    "8:45",
+    "9:40",
+    "10:45",
+    "11:40",
+    "12:45",
+    "13:40",
+    "14:45",
+    "15:40",
+    "16:45",
+    "17:40",
+    "18:45",
+    "19:40",
+    "20:45",
+    "21:40",
+  ];
+
+  const ScheduleGrid({
+    super.key,
+    required this.courses,
+    required this.currentWeek,
+    this.startDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Calculate the start date of the current view week
+    final DateTime viewStartDate = (startDate ?? DateTime.now()).add(
+      Duration(days: (currentWeek - 1) * 7),
+    );
+
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _getSettings(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData)
+          return const Center(child: CircularProgressIndicator());
+
+        final settings = snapshot.data!;
+        final bool showNonCurrentWeek =
+            settings['show_non_current_week'] ?? false;
+
+        // 1. Initial Candidate Selection
+        List<Course> candidates = courses.where((c) {
+          final isCurrentWeek = _isCourseInWeek(c, currentWeek);
+          if (!isCurrentWeek && !showNonCurrentWeek) return false;
+          return true;
+        }).toList();
+
+        // 2. Conflict Resolution: Prioritize Current Week
+        List<Course> displayCourses = [];
+        // Helper to check overlap
+        bool overlaps(Course a, Course b) {
+          return a.dayOfWeek == b.dayOfWeek &&
+              !(a.startNode + a.step <= b.startNode ||
+                  b.startNode + b.step <= a.startNode);
+        }
+
+        for (var c in candidates) {
+          if (_isCourseInWeek(c, currentWeek)) {
+            displayCourses.add(c);
+          } else {
+            // It is a non-current week course.
+            // Check if it overlaps with any CURRENT week course.
+            bool hasConflictWithCurrent = candidates.any(
+              (other) =>
+                  _isCourseInWeek(other, currentWeek) && overlaps(c, other),
+            );
+            // If no conflict with a current week course, show it.
+            if (!hasConflictWithCurrent) {
+              displayCourses.add(c);
+            }
+          }
+        }
+
+        // Calculate overlap groups for side-by-side display
+        Map<Course, int> courseIndex = {};
+        Map<Course, int> courseTotal = {};
+
+        // Group by day key (e.g., "1")
+        for (int day = 1; day <= 7; day++) {
+          final dailyCourses = displayCourses
+              .where((c) => c.dayOfWeek == day)
+              .toList();
+          if (dailyCourses.isEmpty) continue;
+
+          // Sort by startNode
+          dailyCourses.sort((a, b) => a.startNode.compareTo(b.startNode));
+
+          // Let's use a simple slot bucket approach for this task
+          // Create groups of overlapping courses
+          List<List<Course>> groups = [];
+          for (var course in dailyCourses) {
+            bool placed = false;
+            for (var group in groups) {
+              // Check if course overlaps with ANY in group
+              bool overlap = group.any(
+                (c) =>
+                    !(course.startNode + course.step <= c.startNode ||
+                        c.startNode + c.step <= course.startNode),
+              );
+              if (overlap) {
+                group.add(course);
+                placed = true;
+                break;
+              }
+            }
+            if (!placed) {
+              groups.add([course]);
+            }
+          }
+
+          // Assign index and total to each course in groups
+          for (var group in groups) {
+            // Sort group to have consistent ordering (e.g. current week first?)
+            // If one is current week, maybe put it first so it's on left?
+            group.sort((a, b) {
+              bool aCurr = _isCourseInWeek(a, currentWeek);
+              bool bCurr = _isCourseInWeek(b, currentWeek);
+              if (aCurr == bCurr) return 0;
+              return aCurr ? -1 : 1;
+            });
+
+            for (int i = 0; i < group.length; i++) {
+              courseIndex[group[i]] = i;
+              courseTotal[group[i]] = group.length;
+            }
+          }
+        }
+
+        return Column(
+          children: [
+            // Top Bar (Date, Week, Icons)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${DateTime.now().year}/${DateTime.now().month}/${DateTime.now().day}',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '第 $currentWeek 周${(currentWeek < 1) ? " (学期未开始)" : (currentWeek > 20 ? " (学期已结束)" : "")}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AddCourseScreen(),
+                        ),
+                      ).then((value) {
+                        if (value == true) {
+                          context.read<CourseProvider>().loadCourses();
+                        }
+                      });
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.download),
+                    onPressed: () {
+                      _showSyncDialog(context);
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.share),
+                    onPressed: () {
+                      // Share action
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.more_horiz),
+                    onPressed: () {
+                      _showMoreMenu(context);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final bool showGridLines =
+                      settings['show_grid_lines'] ?? true;
+                  final double maxWidth = constraints.maxWidth;
+                  final double maxHeight = constraints.maxHeight;
+
+                  final double timeColumnLocalWidth = 40.0;
+                  final int daysToShow = 7;
+
+                  // Equal widths for all days (weekend same as weekday)
+                  final double unitWidth =
+                      (maxWidth - timeColumnLocalWidth) / 7;
+                  final double dayColumnWidth = unitWidth;
+                  final double weekendColumnWidth = unitWidth;
+
+                  final double headerHeight = 50.0;
+
+                  // Adaptive Row Height with Minimum
+                  double rowHeight = (maxHeight - headerHeight) / 14;
+                  if (rowHeight < 60.0) {
+                    rowHeight = 60.0;
+                  }
+
+                  final double totalHeight = headerHeight + (14 * rowHeight);
+
+                  double getDayX(int dayIndex) {
+                    return timeColumnLocalWidth + (dayIndex * dayColumnWidth);
+                  }
+
+                  double getDayWidth(int dayIndex) {
+                    return dayColumnWidth;
+                  }
+
+                  return SingleChildScrollView(
+                    child: SizedBox(
+                      width: maxWidth,
+                      height: totalHeight,
+                      child: Stack(
+                        children: [
+                          // Background Grid & Lines
+                          if (showGridLines)
+                            CustomPaint(
+                              size: Size(maxWidth, totalHeight),
+                              painter: GridPainter(
+                                timeColumnWidth: timeColumnLocalWidth,
+                                dayColumnWidth: dayColumnWidth,
+                                weekendColumnWidth: weekendColumnWidth,
+                                headerHeight: headerHeight,
+                                rowHeight: rowHeight,
+                                daysToShow: daysToShow,
+                              ),
+                            ),
+
+                          // Header Row (Month + Days)
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: headerHeight,
+                            child: Row(
+                              children: [
+                                // Month Column (Top Left)
+                                SizedBox(
+                                  width: timeColumnLocalWidth,
+                                  child: Center(
+                                    child: Text(
+                                      '${viewStartDate.month}\n月',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Days
+                                ...List.generate(daysToShow, (index) {
+                                  final dayDate = viewStartDate.add(
+                                    Duration(days: index),
+                                  );
+                                  final isToday =
+                                      dayDate.year == DateTime.now().year &&
+                                      dayDate.month == DateTime.now().month &&
+                                      dayDate.day == DateTime.now().day;
+
+                                  return SizedBox(
+                                    width: getDayWidth(index),
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          '${dayDate.day}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                            color: isToday
+                                                ? Theme.of(context).primaryColor
+                                                : Colors.black,
+                                          ),
+                                        ),
+                                        Text(
+                                          _getDayName(index),
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+
+                          // Time Column (Left Side)
+                          Positioned(
+                            top: headerHeight,
+                            left: 0,
+                            width: timeColumnLocalWidth,
+                            bottom: 0,
+                            child: Column(
+                              children: List.generate(14, (index) {
+                                return SizedBox(
+                                  height: rowHeight,
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          '${index + 1}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        Text(
+                                          startTimes[index],
+                                          style: const TextStyle(
+                                            fontSize: 8,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        Text(
+                                          endTimes[index],
+                                          style: const TextStyle(
+                                            fontSize: 8,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
+
+                          // Render Courses
+                          ...displayCourses.map((course) {
+                            final bool isCurrentWeek = _isCourseInWeek(
+                              course,
+                              currentWeek,
+                            );
+
+                            // If day > 7, skip (invalid data)
+                            if (course.dayOfWeek > 7)
+                              return const SizedBox.shrink();
+
+                            int dayIndex = course.dayOfWeek - 1;
+                            double cellWidth = getDayWidth(dayIndex);
+
+                            // Overlap adjustment
+                            int total = courseTotal[course] ?? 1;
+                            int index = courseIndex[course] ?? 0;
+                            double widthPerCourse = cellWidth / total;
+                            double leftOffset =
+                                getDayX(dayIndex) + (index * widthPerCourse);
+
+                            return Positioned(
+                              top:
+                                  headerHeight +
+                                  ((course.startNode - 1) * rowHeight),
+                              left: leftOffset,
+                              width: widthPerCourse,
+                              height: rowHeight * course.step,
+                              child: GestureDetector(
+                                onTap: () => _showCourseDetail(context, course),
+                                child: Container(
+                                  margin: const EdgeInsets.all(1.0),
+                                  padding: const EdgeInsets.all(4.0),
+                                  decoration: BoxDecoration(
+                                    color: _getCourseColor(
+                                      course,
+                                      isCurrentWeek,
+                                    ),
+
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize:
+                                        MainAxisSize.min, // Wrap content
+                                    children: [
+                                      Text(
+                                        course.isVirtual
+                                            ? '(虚拟)${course.courseName}'
+                                            : course.courseName,
+                                        style: TextStyle(
+                                          color: isCurrentWeek
+                                              ? Colors.white
+                                              : Colors.grey[700],
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          height: 1.1,
+                                        ),
+                                        maxLines: null, // Allow unlimited lines
+                                        overflow: TextOverflow
+                                            .fade, // If really too long
+                                      ),
+                                      if (course.classRoom.isNotEmpty)
+                                        Text(
+                                          '@${course.classRoom}',
+                                          style: TextStyle(
+                                            color: isCurrentWeek
+                                                ? Colors.white
+                                                : Colors.grey[700],
+                                            fontSize: 9,
+                                            height: 1.1,
+                                          ),
+                                          maxLines: null,
+                                        ),
+                                      if (course.teacher.isNotEmpty)
+                                        Text(
+                                          course.teacher,
+                                          style: TextStyle(
+                                            color: isCurrentWeek
+                                                ? Colors.white
+                                                : Colors.grey[700],
+                                            fontSize: 9,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> _getSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'show_non_current_week': prefs.getBool('show_non_current_week') ?? false,
+      'show_grid_lines':
+          prefs.getBool('show_grid_lines') ?? true, // Default to true
+    };
+  }
+
+  void _showMoreMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '更多功能',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildMenuButton(context, Icons.tune, '课表设置', () {
+                    Navigator.pop(context);
+                    // Navigate to schedule settings (maybe just management for now)
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const ScheduleManagementScreen(), // Changed to use imported screen
+                      ),
+                    );
+                  }),
+                  _buildMenuButton(context, Icons.settings, '全局设置', () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/settings');
+                  }),
+                  _buildMenuButton(context, Icons.info_outline, '关于', () {
+                    Navigator.pop(context);
+                    showAboutDialog(
+                      context: context,
+                      applicationName: '交大课表',
+                      applicationVersion: '1.0.0',
+                      applicationIcon: const Icon(Icons.calendar_today),
+                      children: [const Text('一个简单的课表应用')],
+                    );
+                  }),
+                  _buildMenuButton(context, Icons.help_outline, '常见问题', () {
+                    Navigator.pop(context);
+                    // Show FAQ
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('常见问题'),
+                        content: const Text(
+                          'Q: 如何导入课表？\nA: 点击右上角下载图标，登录jAccount即可同步。\n\nQ: 如何删除课程？\nA: 点击课程卡片，选择删除。',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('关闭'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Helper methods from previous version (restored/updated)
+
+  Widget _buildMenuButton(
+    BuildContext context,
+    IconData icon,
+    String label,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: Theme.of(context).primaryColor, size: 28),
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  void _showMoreMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '更多功能',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                   _buildMenuButton(context, Icons.tune, '课表设置', () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ScheduleSettingsScreen(),
+                      ),
+                    );
+                  }),
+                   _buildMenuButton(context, Icons.calendar_view_day, '课表切换', () {
+                     Navigator.pop(context);
+                     // Changed to use ScheduleManagementScreen for switching
+                     Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ScheduleManagementScreen(),
+                      ),
+                    );
+                  }),
+                  _buildMenuButton(context, Icons.import_export, '导入课程', () {
+                    Navigator.pop(ctx);
+                     _showSyncDialog(context);
+                  }),
+                  _buildMenuButton(context, Icons.add, '添加课程', () {
+                    Navigator.pop(ctx);
+                     // Assuming AddCourseScreen is available
+                     // We need to import it or implement it.
+                     // The _showCourseDetail had logic to create AddCourseScreen(course: course)
+                     // Here we pass null.
+                     // But I need to make sure AddCourseScreen is imported or available.
+                     // The previous file content didn't show imports for AddCourseScreen,
+                     // but it was used in _showCourseDetail.
+                     // I will search for it or assume it's there. 
+                     // Wait, I can't invoke it if I don't see the import.
+                     // In the `read_file`, `_showCourseDetail` used `AddCourseScreen`.
+                     // I'll assume the import is present at top of file (it wasn't in partial read but likely there).
+                     // Ideally I should check imports. I will check imports now.
+                  }),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Re-add App bar with action?
+    // The previous structure didn't have AppBar in Scaffold.
+    // If I want "More" button on top right, I should add AppBar.
+  }
+  
+  // Since I wrapped the Scaffold above, I can add AppBar there.
+  // But wait, the previous code had `return Scaffold(...)`.
+  // I replaced the `build` method.
+  // I should add `appBar: AppBar(actions: [...])` to the Scaffold in `build`.
+  // I'll do that in a separate edit to the `build` method.
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(course.courseName),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('教师: ${course.teacher}'),
+              Text('教室: ${course.classRoom}'),
+              Text('周次: ${course.startWeek}-${course.endWeek}周'),
+              Text(
+                '时间: ${_getDayName(course.dayOfWeek - 1)} ${course.startNode}-${course.startNode + course.step - 1}节',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('删除课程'),
+                    content: const Text('确定要删除这门课程吗？'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('取消'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('删除'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true) {
+                  // Use the context of the widget, not the dialog
+                  if (context.mounted) {
+                    await DatabaseHelper.instance.deleteCourse(course.id!);
+                    // Close detail dialog
+                    if (context.mounted) Navigator.pop(context);
+                    // Refresh
+                    if (context.mounted) {
+                      context.read<CourseProvider>().loadCourses();
+                    }
+                  }
+                }
+              },
+              child: const Text('删除', style: TextStyle(color: Colors.red)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close detail dialog
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AddCourseScreen(course: course),
+                  ),
+                ).then((value) {
+                  if (value == true) {
+                    context.read<CourseProvider>().loadCourses();
+                  }
+                });
+              },
+              child: const Text('编辑'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  bool _isCourseInWeek(Course course, int currentWeek) {
+    if (course.weekCode != null && course.weekCode!.isNotEmpty) {
+      if (currentWeek > 0 && currentWeek <= course.weekCode!.length) {
+        return course.weekCode![currentWeek - 1] == '1';
+      }
+      return false;
+    }
+    if (currentWeek < course.startWeek || currentWeek > course.endWeek)
+      return false;
+    if (course.isOddWeek && currentWeek % 2 == 0) return false;
+    if (course.isEvenWeek && currentWeek % 2 != 0) return false;
+    return true;
+  }
+
+  Color _getCourseColor(Course course, bool isCurrentWeek) {
+    if (course.isVirtual) return Colors.grey.shade300;
+
+    Color color = _parseColor(course.color, course.courseName);
+    if (!isCurrentWeek) {
+      return color.withOpacity(0.3); // Light color for non-current
+    }
+    return color;
+  }
+
+  Color _parseColor(String? colorStr, String seed) {
+    if (colorStr != null && colorStr.startsWith('#')) {
+      try {
+        return Color(int.parse(colorStr.replaceFirst('#', '0xFF')));
+      } catch (e) {
+        // ignore
+      }
+    }
+    return Colors.primaries[seed.hashCode % Colors.primaries.length];
+  }
+
+  String _getDayName(int index) {
+    const days = ['一', '二', '三', '四', '五', '六', '日'];
+    return days[index % 7];
+  }
+
+  void _showSyncDialog(BuildContext context) {
+    String year = '2025';
+    String term = '1';
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('同步课表'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  initialValue: year,
+                  decoration: const InputDecoration(labelText: '学年 (如 2025)'),
+                  keyboardType: TextInputType.number,
+                  validator: (value) => value!.isEmpty ? '请输入学年' : null,
+                  onSaved: (val) => year = val!,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: term,
+                  decoration: const InputDecoration(labelText: '学期'),
+                  items: const [
+                    DropdownMenuItem(value: '1', child: Text('第1学期 (秋季)')),
+                    DropdownMenuItem(value: '2', child: Text('第2学期 (春季)')),
+                    DropdownMenuItem(value: '3', child: Text('第3学期 (夏季)')),
+                  ],
+                  onChanged: (val) => term = val!,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '注意：请确保已登录 jaccount',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  formKey.currentState!.save();
+                  Navigator.pop(dialogContext);
+                  context.read<CourseProvider>().syncCourses(year, term);
+                }
+              },
+              child: const Text('同步'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class GridPainter extends CustomPainter {
+  final double timeColumnWidth;
+  final double dayColumnWidth;
+  final double weekendColumnWidth;
+  final double headerHeight;
+  final double rowHeight;
+  final int daysToShow; // Added missing field
+  final bool showGridLines;
+
+  GridPainter({
+    required this.timeColumnWidth,
+    required this.dayColumnWidth,
+    required this.weekendColumnWidth,
+    required this.headerHeight,
+    required this.rowHeight,
+    this.daysToShow = 7,
+    this.showGridLines = true,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!showGridLines) return; // Don't paint if disabled
+
+    final paint = Paint()
+      ..color = Colors.grey.withOpacity(0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    // Draw vertical lines with variable width
+    double x = timeColumnWidth;
+    for (int i = 0; i <= daysToShow; i++) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+      if (i < daysToShow) {
+        // Add width for next column
+        if (i < 5)
+          x += dayColumnWidth;
+        else
+          x += weekendColumnWidth;
+      }
+    }
+
+    // Draw horizontal lines
+
+    for (int i = 0; i <= daysToShow; i++) {
+      double x = timeColumnWidth + (i * dayColumnWidth);
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+
+    // Draw horizontal lines
+    for (int i = 0; i <= 14; i++) {
+      double y = headerHeight + (i * rowHeight);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+
+    // Header line
+    paint.strokeWidth = 2.0;
+    canvas.drawLine(
+      Offset(0, headerHeight),
+      Offset(size.width, headerHeight),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) {
+    return false;
+  }
+}
