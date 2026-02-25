@@ -1,0 +1,72 @@
+# Miscellaneous
+*.class
+*.log
+*.lock
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ / Android Studio
+.idea
+*.iml
+*.ipr
+*.iws
+out/
+
+# Visual Studio Code
+.vscode/
+
+# Gradle / Android (For example/CourseBlock)
+.gradle/
+build/
+local.properties
+.cxx/
+*.apk
+*.ap_
+captures/
+gradlew
+!gradlew
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+.externalNativeBuild
+.cxx
+*.hprof
+*.keystore
+
+# Flutter (For future course_block project)
+**/doc/api/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Fastlane
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+
+# Node / Web (If usage in doc site or future hybrid)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Python (From environment check)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+
+*.md
+doc/
+example/
