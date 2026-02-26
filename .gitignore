@@ -67,6 +67,6 @@ __pycache__/
 env/
 venv/
 
-*.md
+plan.md
 doc/
 example/
