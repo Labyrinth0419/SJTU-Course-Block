@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../ui/login/login_selection_screen.dart';
 import '../../core/providers/course_provider.dart';
 import 'schedule_management_screen.dart';
+import '../screens/faq_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -324,6 +325,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
                 onTap: () => _showLauncherIconDialog(context),
+              ),
+              ListTile(
+                leading: const Icon(Icons.help_outline),
+                title: const Text('帮助与反馈'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (ctx) => const FaqScreen()),
+                  );
+                },
               ),
               const Divider(),
             ],

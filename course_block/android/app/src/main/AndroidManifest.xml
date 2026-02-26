@@ -12,6 +12,23 @@
         <service
             android:name="com.solusibejo.flutter_dynamic_icon_plus.FlutterDynamicIconPlusService"
             android:stopWithTask="false" />
+
+        <!-- course widget provider and remote views service -->
+        <receiver
+            android:name=".CourseWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_course_info" />
+        </receiver>
+
+        <service
+            android:name=".CourseWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"

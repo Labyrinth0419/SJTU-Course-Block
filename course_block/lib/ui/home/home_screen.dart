@@ -234,8 +234,13 @@ class _HomeScreenState extends State<HomeScreen>
     final target = provider.currentWeek - 1;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_pageController == null) return;
-      if (_pageController!.page?.round() != target) {
-        _pageController!.jumpToPage(target);
+      // Only access PageController.page when it has attached positions
+      if (_pageController!.hasClients) {
+        final page =
+            _pageController!.page ?? _pageController!.initialPage.toDouble();
+        if (page.round() != target) {
+          _pageController!.jumpToPage(target);
+        }
       }
     });
   }

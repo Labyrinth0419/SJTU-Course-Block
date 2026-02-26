@@ -4,6 +4,7 @@ import '../../core/db/database_helper.dart';
 import '../../core/models/course.dart';
 import '../../core/models/schedule.dart';
 import '../../core/services/course_service.dart';
+import '../../core/services/widget_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
@@ -204,6 +205,7 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> loadCourses({bool recalcWeek = true}) async {
+    debugPrint('CourseProvider.loadCourses called');
     _isLoading = true;
     notifyListeners();
 
@@ -255,6 +257,9 @@ class CourseProvider extends ChangeNotifier {
       } else {
         _courses = [];
       }
+      // sync widget after courses have been loaded successfully
+      debugPrint('CourseProvider calling WidgetService.syncTodayCourses');
+      await WidgetService.syncTodayCourses();
     } catch (e) {
       debugPrint('Error loading courses/schedules: $e');
     } finally {
@@ -278,7 +283,6 @@ class CourseProvider extends ChangeNotifier {
       }
 
       Schedule? targetSchedule;
-
 
       if (_currentSchedule == null) {
         final now = DateTime.now();
@@ -313,7 +317,6 @@ class CourseProvider extends ChangeNotifier {
         }
 
         for (var course in uniqueCourses.values) {
-
           /* 
              We need to add `scheduleId` to the fetched course.
              Since `Course` is immutable, we can assume `Course.fromMap` was used in `_courseService`.
@@ -344,7 +347,10 @@ class CourseProvider extends ChangeNotifier {
           targetSchedule.id!,
         );
       }
-      return fetchedCourses.length;
+      final count = fetchedCourses.length;
+      // update widget after sync operation
+      await WidgetService.syncTodayCourses();
+      return count;
     } catch (e) {
       debugPrint('Error syncing courses: $e');
       return 0;
@@ -453,8 +459,7 @@ class CourseProvider extends ChangeNotifier {
           final newCourse = course.copyWith(scheduleId: scheduleId);
           await DatabaseHelper.instance.insertCourse(newCourse);
           inserted++;
-        } catch (e) {
-        }
+        } catch (e) {}
       }
       await loadCourses();
       return inserted;

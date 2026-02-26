@@ -340,6 +340,8 @@ class ScheduleSettingsScreen extends StatelessWidget {
                 },
               ),
 
+              const SizedBox(height: 10),
+              _buildSectionHeader(context, '外观设置'),
               _buildSwitchTile(
                 context,
                 '显示周六',
@@ -380,7 +382,7 @@ class ScheduleSettingsScreen extends StatelessWidget {
               ),
 
               const SizedBox(height: 20),
-              _buildSectionHeader(context, '更多外观设置'),
+              _buildSectionHeader(context, '背景设置'),
               const SizedBox(height: 8),
               _buildBackgroundPreview(context, provider),
               const SizedBox(height: 16),
