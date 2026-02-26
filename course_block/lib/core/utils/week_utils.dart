@@ -1,4 +1,3 @@
-// lib/core/utils/week_utils.dart
 
 class WeekUtils {
   static const int MAX_WEEKS = 24; // Assuming 24 weeks max
@@ -22,7 +21,6 @@ class WeekUtils {
       bool isOdd = false;
       bool isEven = false;
 
-      // Remove '周' first as it might appear before (单)/(双) or at the end
       item = item.replaceAll('周', '');
 
       if (item.contains('(单)')) {
@@ -46,7 +44,6 @@ class WeekUtils {
         end = start;
       }
 
-      // Adjust start if needed
       if (isOdd && start % 2 == 0) start++;
       if (isEven && start % 2 != 0) start++;
 
@@ -64,7 +61,6 @@ class WeekUtils {
   static List<int> getStartAndStep(String jcor) {
     if (jcor.isEmpty) return [1, 2];
 
-    // Clean up non-numeric characters except dash
     String cleanJcor = jcor.replaceAll(RegExp(r'[^0-9\-]'), '');
 
     final parts = cleanJcor.split('-');

@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dynamic_icon_plus/flutter_dynamic_icon_plus.dart';
 import '../../core/db/database_helper.dart';
 import '../../core/models/course.dart';
 import '../../core/models/schedule.dart';
 import '../../core/services/course_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:intl/intl.dart';
 
 class CourseProvider extends ChangeNotifier {
   List<Course> _courses = [];
@@ -12,16 +20,18 @@ class CourseProvider extends ChangeNotifier {
   bool _isLoading = false;
   int _currentWeek = 1; // Displayed week
 
-  // Settings
   bool _showGridLines = true;
   bool _showNonCurrentWeek = false;
   bool _showSaturday = true;
   bool _showSunday = true;
+  bool _outlineText = false; // new setting
+  ThemeMode _themeMode = ThemeMode.system; // new theme mode setting
   int _maxDailyClasses = 14;
   int _totalWeeks = 20;
   double _gridHeight = 64.0;
   double _cornerRadius = 4.0;
-  int? _backgroundColorValue;
+  int? _backgroundColorLight;
+  int? _backgroundColorDark;
   String? _backgroundImagePath;
   double _backgroundImageOpacity = 0.3;
 
@@ -31,19 +41,46 @@ class CourseProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   int get currentWeek => _currentWeek;
 
-  // Settings getters
   bool get showGridLines => _showGridLines;
   bool get showNonCurrentWeek => _showNonCurrentWeek;
   bool get showSaturday => _showSaturday;
   bool get showSunday => _showSunday;
+  bool get outlineText => _outlineText; // new getter
+  ThemeMode get themeMode => _themeMode; // new getter
   int get maxDailyClasses => _maxDailyClasses;
   int get totalWeeks => _totalWeeks;
   double get gridHeight => _gridHeight;
   double get cornerRadius => _cornerRadius;
-  Color? get backgroundColor =>
-      _backgroundColorValue != null ? Color(_backgroundColorValue!) : null;
+  Color? get backgroundColorLight =>
+      _backgroundColorLight != null ? Color(_backgroundColorLight!) : null;
+  Color? get backgroundColorDark =>
+      _backgroundColorDark != null ? Color(_backgroundColorDark!) : null;
   String? get backgroundImagePath => _backgroundImagePath;
   double get backgroundImageOpacity => _backgroundImageOpacity;
+
+  String? _launcherIcon;
+  String? get launcherIcon => _launcherIcon;
+
+  /// Scan assets/icons/* directory for alternate launcher icons.
+  ///
+  /// Uses the official AssetManifest API that handles both JSON and binary
+  /// formats; no manual decoding required.
+  Future<List<String>> getAvailableLauncherIcons() async {
+    final names = <String>{};
+    try {
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      for (final key in manifest.listAssets()) {
+        if (key.startsWith('assets/icons/') || key.startsWith('assets/icon/')) {
+          final iconName = p.basenameWithoutExtension(key);
+          if (iconName == 'ic_launcher') continue; // skip default
+          names.add(iconName);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading AssetManifest: $e');
+    }
+    return names.toList();
+  }
 
   final CourseService _courseService = CourseService();
 
@@ -61,10 +98,27 @@ class CourseProvider extends ChangeNotifier {
     _totalWeeks = prefs.getInt('total_weeks') ?? 20;
     _gridHeight = prefs.getDouble('grid_height') ?? 64.0;
     _cornerRadius = prefs.getDouble('corner_radius') ?? 4.0;
-    _backgroundColorValue = prefs.getInt('background_color');
     _backgroundImagePath = prefs.getString('background_image_path');
     _backgroundImageOpacity =
         prefs.getDouble('background_image_opacity') ?? 0.3;
+    _backgroundColorLight = prefs.getInt('background_color_light');
+    _backgroundColorDark = prefs.getInt('background_color_dark');
+    _outlineText = prefs.getBool('outline_text') ?? false;
+    _launcherIcon = prefs.getString('app_icon_choice');
+    if (_launcherIcon != null) {
+      _applyLauncherIcon(_launcherIcon);
+    }
+    final mode = prefs.getString('theme_mode');
+    switch (mode) {
+      case 'light':
+        _themeMode = ThemeMode.light;
+        break;
+      case 'dark':
+        _themeMode = ThemeMode.dark;
+        break;
+      default:
+        _themeMode = ThemeMode.system;
+    }
     notifyListeners();
   }
 
@@ -76,11 +130,18 @@ class CourseProvider extends ChangeNotifier {
       if (key == 'show_non_current_week') _showNonCurrentWeek = value;
       if (key == 'show_saturday') _showSaturday = value;
       if (key == 'show_sunday') _showSunday = value;
+      if (key == 'outline_text') _outlineText = value;
     } else if (value is int) {
       await prefs.setInt(key, value);
       if (key == 'max_daily_classes') _maxDailyClasses = value;
-      if (key == 'total_weeks') _totalWeeks = value;
-      if (key == 'background_color') _backgroundColorValue = value;
+      if (key == 'total_weeks') {
+        _totalWeeks = value;
+        if (_currentWeek > _totalWeeks) {
+          _currentWeek = _totalWeeks;
+        }
+      }
+      if (key == 'background_color_light') _backgroundColorLight = value;
+      if (key == 'background_color_dark') _backgroundColorDark = value;
     } else if (value is double) {
       await prefs.setDouble(key, value);
       if (key == 'grid_height') _gridHeight = value;
@@ -89,19 +150,68 @@ class CourseProvider extends ChangeNotifier {
     } else if (value is String) {
       await prefs.setString(key, value);
       if (key == 'background_image_path') _backgroundImagePath = value;
+      if (key == 'theme_mode') {
+        switch (value) {
+          case 'light':
+            _themeMode = ThemeMode.light;
+            break;
+          case 'dark':
+            _themeMode = ThemeMode.dark;
+            break;
+          default:
+            _themeMode = ThemeMode.system;
+        }
+      }
+      if (key == 'app_icon_choice') {
+        _launcherIcon = value;
+        _applyLauncherIcon(value);
+      }
     }
     notifyListeners();
   }
 
-  Future<void> loadCourses() async {
+  Future<void> _applyLauncherIcon(String? name) async {
+    try {
+      if (await FlutterDynamicIconPlus.supportsAlternateIcons) {
+        final String? fullName = name == null
+            ? null
+            : 'com.labyrinth.course_block.$name';
+        await FlutterDynamicIconPlus.setAlternateIconName(
+          iconName: fullName,
+          blacklistBrands: [
+            'vivo',
+            'VIVO',
+            'iqoo',
+            'IQOO',
+            'Xiaomi',
+            'Redmi',
+            'OPPO',
+            'OnePlus',
+          ],
+          blacklistManufactures: [
+            'vivo',
+            'VIVO',
+            'iqoo',
+            'IQOO',
+            'Xiaomi',
+            'Redmi',
+          ],
+        );
+      }
+    } catch (e) {
+      debugPrint('error setting launcher icon: $e');
+    }
+  }
+
+  Future<void> loadCourses({bool recalcWeek = true}) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      // Load schedules
       _schedules = await DatabaseHelper.instance.getAllSchedules();
 
-      // Load current schedule
+      final oldScheduleId = _currentSchedule?.id;
+
       _currentSchedule = await DatabaseHelper.instance.getCurrentSchedule();
 
       if (_currentSchedule == null) {
@@ -111,10 +221,7 @@ class CourseProvider extends ChangeNotifier {
             _currentSchedule!.id!,
           );
         } else {
-          // No schedules, creating default? Or wait for sync?
-          // Let's create a default one if none exist
           final now = DateTime.now();
-          // Start of this week (Monday)
           final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
 
           final defaultSchedule = Schedule(
@@ -131,13 +238,14 @@ class CourseProvider extends ChangeNotifier {
           _schedules = [_currentSchedule!];
         }
       } else {
-        // Calculate current week based on start date
-        final diff = DateTime.now()
-            .difference(_currentSchedule!.startDate)
-            .inDays;
-        _currentWeek = (diff / 7).floor() + 1;
-        if (_currentWeek < 1) _currentWeek = 1;
-        // if (_currentWeek > 20) _currentWeek = 20; // Optional cap
+        if (recalcWeek || _currentSchedule?.id != oldScheduleId) {
+          final diff = DateTime.now()
+              .difference(_currentSchedule!.startDate)
+              .inDays;
+          _currentWeek = (diff / 7).floor() + 1;
+          if (_currentWeek < 1) _currentWeek = 1;
+          if (_currentWeek > _totalWeeks) _currentWeek = _totalWeeks;
+        }
       }
 
       if (_currentSchedule != null && _currentSchedule!.id != null) {
@@ -169,13 +277,8 @@ class CourseProvider extends ChangeNotifier {
         return 0;
       }
 
-      // Create or update schedule for this sync
       Schedule? targetSchedule;
 
-      // Check if we already have a schedule for this year/term
-      // Logic: If current schedule matches, update it. If not, create new?
-      // For simplicity, let's assume we are updating the current active schedule or creating a new one if requested.
-      // But typically "Sync" implies pulling data for the *current context*.
 
       if (_currentSchedule == null) {
         final now = DateTime.now();
@@ -193,8 +296,6 @@ class CourseProvider extends ChangeNotifier {
         _currentSchedule = targetSchedule;
       } else {
         targetSchedule = _currentSchedule!;
-        // Update year/term if different? Or just trust the user synced into the right bucket.
-        // Let's keep it simple: Syncing updates the CURRENT schedule's courses.
       }
 
       if (fetchedCourses.isNotEmpty && targetSchedule.id != null) {
@@ -202,10 +303,8 @@ class CourseProvider extends ChangeNotifier {
           targetSchedule.id!,
         );
 
-        // Deduplicate courses based on key properties
         final uniqueCourses = <String, Course>{};
         for (var course in fetchedCourses) {
-          // Generate a unique key for the course
           final key =
               '${course.courseName}_${course.teacher}_${course.dayOfWeek}_${course.startNode}_${course.startWeek}_${course.endWeek}';
           if (!uniqueCourses.containsKey(key)) {
@@ -214,11 +313,6 @@ class CourseProvider extends ChangeNotifier {
         }
 
         for (var course in uniqueCourses.values) {
-          // Inject scheduleId
-          // Since course model is immutable and we fetch it from service without scheduleId,
-          // we need to recreate it or map it.
-          // Course.fromMap won't work because it expects a map.
-          // Best way: Create a copyWith or new instance.
 
           /* 
              We need to add `scheduleId` to the fetched course.
@@ -261,6 +355,12 @@ class CourseProvider extends ChangeNotifier {
   }
 
   void setCurrentWeek(int week) {
+    if (week < 1) {
+      week = 1;
+    }
+    if (week > _totalWeeks) {
+      week = _totalWeeks;
+    }
     _currentWeek = week;
     notifyListeners();
   }
@@ -283,7 +383,6 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> deleteSchedule(int scheduleId) async {
-    // Delete courses first (manual cascade)
     await DatabaseHelper.instance.deleteCoursesBySchedule(scheduleId);
     await DatabaseHelper.instance.deleteSchedule(scheduleId);
     await loadCourses();
@@ -296,5 +395,175 @@ class CourseProvider extends ChangeNotifier {
 
   Future<void> setBackgroundImage(String path) async {
     await updateSetting('background_image_path', path);
+  }
+
+  Future<String> exportCoursesJson([String? targetPath]) async {
+    final list = _courses.map((c) => c.toMap()).toList();
+    if (targetPath != null && targetPath.isNotEmpty) {
+      final file = File(targetPath);
+      await file.writeAsString(JsonEncoder.withIndent('  ').convert(list));
+      return file.path;
+    }
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/course_export.json');
+    await file.writeAsString(JsonEncoder.withIndent('  ').convert(list));
+    return file.path;
+  }
+
+  Future<String> exportCoursesIcs([String? targetPath]) async {
+    if (_currentSchedule == null) return '';
+    final ics = _generateIcs(_courses, _currentSchedule!.startDate);
+    if (targetPath != null && targetPath.isNotEmpty) {
+      final file = File(targetPath);
+      await file.writeAsString(ics);
+      return file.path;
+    }
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/course_export.ics');
+    await file.writeAsString(ics);
+    return file.path;
+  }
+
+  Future<Uint8List> exportCoursesJsonBytes() async {
+    final list = _courses.map((c) => c.toMap()).toList();
+    final str = JsonEncoder.withIndent('  ').convert(list);
+    return Uint8List.fromList(utf8.encode(str));
+  }
+
+  Future<Uint8List> exportCoursesIcsBytes() async {
+    if (_currentSchedule == null) return Uint8List(0);
+    final ics = _generateIcs(_courses, _currentSchedule!.startDate);
+    return Uint8List.fromList(utf8.encode(ics));
+  }
+
+  Future<int> importCoursesJson(String path) async {
+    try {
+      final file = File(path);
+      final content = await file.readAsString();
+      final list = json.decode(content) as List;
+      int inserted = 0;
+      if (_currentSchedule == null || _currentSchedule!.id == null) {
+        return 0;
+      }
+      final scheduleId = _currentSchedule!.id!;
+
+      for (var item in list) {
+        try {
+          final course = Course.fromMap(item as Map<String, dynamic>);
+          final newCourse = course.copyWith(scheduleId: scheduleId);
+          await DatabaseHelper.instance.insertCourse(newCourse);
+          inserted++;
+        } catch (e) {
+        }
+      }
+      await loadCourses();
+      return inserted;
+    } catch (e) {
+      debugPrint('Error importing JSON: $e');
+      return 0;
+    }
+  }
+
+  Future<int> importCoursesIcs(String path) async {
+    if (_currentSchedule == null) return 0;
+    try {
+      final file = File(path);
+      final content = await file.readAsString();
+      final parsed = _parseIcs(content, _currentSchedule!.startDate);
+      int count = 0;
+      final scheduleId = _currentSchedule!.id!;
+      for (var course in parsed) {
+        final newCourse = course.copyWith(scheduleId: scheduleId);
+        await DatabaseHelper.instance.insertCourse(newCourse);
+        count++;
+      }
+      await loadCourses();
+      return count;
+    } catch (e) {
+      debugPrint('Error importing ICS: $e');
+      return 0;
+    }
+  }
+
+  List<Course> _parseIcs(String content, DateTime startDate) {
+    final events = content.split('BEGIN:VEVENT').skip(1);
+    final List<Course> list = [];
+    for (var ev in events) {
+      String? _field(String name) {
+        final reg = RegExp('$name:(.+)');
+        final m = reg.firstMatch(ev);
+        return m?.group(1)?.trim();
+      }
+
+      final summary = _field('SUMMARY');
+      final location = _field('LOCATION');
+      final dtstart = _field('DTSTART');
+      final duration = _field('DURATION');
+      if (summary == null || dtstart == null) continue;
+      DateTime dt;
+      try {
+        dt = DateFormat("yyyyMMdd'T'HHmmss").parse(dtstart);
+      } catch (_) {
+        try {
+          dt = DateFormat("yyyyMMdd").parse(dtstart);
+        } catch (__) {
+          continue;
+        }
+      }
+      final diff = dt.difference(startDate).inDays;
+      final week = (diff / 7).floor() + 1;
+      final day = dt.weekday; // 1=Mon
+      int step = 1;
+      if (duration != null) {
+        final m = RegExp(r'PT(\d+)M').firstMatch(duration);
+        if (m != null) {
+          final mins = int.tryParse(m.group(1)!) ?? 0;
+          step = (mins / 45).ceil();
+        }
+      }
+      list.add(
+        Course(
+          scheduleId: null,
+          courseId: '',
+          courseName: summary,
+          teacher: '',
+          classRoom: location ?? '',
+          startWeek: week,
+          endWeek: week,
+          dayOfWeek: day,
+          startNode: 1,
+          step: step,
+          isOddWeek: false,
+          isEvenWeek: false,
+          weekCode: null,
+          color: '#FF5722',
+        ),
+      );
+    }
+    return list;
+  }
+
+  String _generateIcs(List<Course> courses, DateTime startDate) {
+    final buffer = StringBuffer();
+    buffer.writeln('BEGIN:VCALENDAR');
+    buffer.writeln('VERSION:2.0');
+    buffer.writeln('PRODID:-//CourseBlock//EN');
+    for (var course in courses) {
+      final firstDate = startDate.add(
+        Duration(days: (course.startWeek - 1) * 7 + (course.dayOfWeek - 1)),
+      );
+      final dt = DateFormat("yyyyMMdd'T'HHmmss").format(firstDate);
+      buffer.writeln('BEGIN:VEVENT');
+      buffer.writeln('SUMMARY:${course.courseName}');
+      buffer.writeln('LOCATION:${course.classRoom}');
+      buffer.writeln('DTSTART:$dt');
+      final durationMinutes = 45 * course.step;
+      buffer.writeln('DURATION:PT${durationMinutes}M');
+      final weeks = course.endWeek - course.startWeek + 1;
+      buffer.writeln('RRULE:FREQ=WEEKLY;COUNT=$weeks');
+      buffer.writeln('END:VEVENT');
+    }
+    buffer.writeln('END:VCALENDAR');
+    return buffer.toString();
   }
 }

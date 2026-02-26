@@ -50,8 +50,6 @@ class Course {
     this.isVirtual = false,
   });
 
-  // Convert a Course into a Map. The keys must correspond to the names of the
-  // columns in the database.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -91,6 +89,44 @@ class Course {
       weekCode: map['weekCode'],
       color: map['color'] ?? '#FF5722',
       isVirtual: (map['isVirtual'] as int? ?? 0) == 1,
+    );
+  }
+
+  Course copyWith({
+    int? id,
+    int? scheduleId,
+    String? courseId,
+    String? courseName,
+    String? teacher,
+    String? classRoom,
+    int? startWeek,
+    int? endWeek,
+    int? dayOfWeek,
+    int? startNode,
+    int? step,
+    bool? isOddWeek,
+    bool? isEvenWeek,
+    String? weekCode,
+    String? color,
+    bool? isVirtual,
+  }) {
+    return Course(
+      id: id ?? this.id,
+      scheduleId: scheduleId ?? this.scheduleId,
+      courseId: courseId ?? this.courseId,
+      courseName: courseName ?? this.courseName,
+      teacher: teacher ?? this.teacher,
+      classRoom: classRoom ?? this.classRoom,
+      startWeek: startWeek ?? this.startWeek,
+      endWeek: endWeek ?? this.endWeek,
+      dayOfWeek: dayOfWeek ?? this.dayOfWeek,
+      startNode: startNode ?? this.startNode,
+      step: step ?? this.step,
+      isOddWeek: isOddWeek ?? this.isOddWeek,
+      isEvenWeek: isEvenWeek ?? this.isEvenWeek,
+      weekCode: weekCode ?? this.weekCode,
+      color: color ?? this.color,
+      isVirtual: isVirtual ?? this.isVirtual,
     );
   }
 

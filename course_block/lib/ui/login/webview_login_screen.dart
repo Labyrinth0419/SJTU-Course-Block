@@ -1,4 +1,3 @@
-// lib/ui/login/webview_login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,32 +51,43 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
               _isLoading = false;
             });
 
-            // Check if login successful
-            // Undergraduate: i.sjtu.edu.cn/xtgl/index_initMenu.html or xskbcx_cxXskbcxIndex.html
-            // Graduate: yjs.sjtu.edu.cn/...
             if (url.contains('index_initMenu.html') ||
                 url.contains('wdkb') ||
                 url.contains('main.html') ||
                 url.contains('xskbcx_cxXskbcxIndex.html')) {
               try {
-                // Use cookie_manager to get all cookies including HttpOnly
                 final cookieManager = cookie_mgr.WebviewCookieManager();
                 final cookies = await cookieManager.getCookies(url);
 
                 if (cookies.isNotEmpty) {
-                  // Format cookies for Dio: "name=value; name2=value2"
                   final cookieString = cookies
                       .map((c) => '${c.name}=${c.value}')
                       .join('; ');
 
                   final prefs = await SharedPreferences.getInstance();
-                  await prefs.setString('cookies', cookieString);
-
+                  await prefs.setString(
+                    'cookies',
+                    cookieString,
+                  ); // try to build simple user info from non-session cookie
+                  String? display;
+                  for (var c in cookies) {
+                    final name = c.name.toLowerCase();
+                    if (name.contains('user') ||
+                        name.contains('uid') ||
+                        name.contains('jaccount')) {
+                      display = '${c.name}=${c.value}';
+                      break;
+                    }
+                  }
+                  if (display == null && cookies.isNotEmpty) {
+                    display = cookies.first.name;
+                  }
+                  if (display != null)
+                    await prefs.setString('user_info', display);
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('登录成功，Cookie已保存')),
                     );
-                    // Navigate back with success
                     if (mounted) Navigator.pop(context, true);
                   }
                 }
@@ -89,7 +99,6 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
         ),
       );
 
-    // Clear cookies before loading to ensure a fresh login session
     cookie_mgr.WebviewCookieManager().clearCookies().then((_) {
       _controller.loadRequest(Uri.parse(widget.initialUrl));
     });

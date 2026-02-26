@@ -43,7 +43,6 @@ class ScheduleManagementScreen extends StatelessWidget {
                       );
                       return;
                     }
-                    // Confirm delete
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(

@@ -51,5 +51,29 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	
+	<!-- dynamic alternate icon config -->
+	<key>CFBundleIcons</key>
+	<dict>
+	    <key>CFBundlePrimaryIcon</key>
+	    <dict>
+	        <key>CFBundleIconFiles</key>
+	        <array>
+	            <string>AppIcon</string>
+	        </array>
+	    </dict>
+	    <key>CFBundleAlternateIcons</key>
+	    <dict>
+	        <key>vip_icon</key>
+	        <dict>
+	            <key>CFBundleIconFiles</key>
+	            <array>
+	                <string>vip_icon</string>
+	            </array>
+	            <key>UIPrerenderedIcon</key>
+	            <false/>
+	        </dict>
+	    </dict>
+	</dict>
 </dict>
 </plist>

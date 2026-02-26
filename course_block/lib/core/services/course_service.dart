@@ -1,4 +1,3 @@
-// lib/core/services/course_service.dart
 import 'dart:convert';
 import 'dart:math';
 import 'package:dio/dio.dart';
@@ -30,7 +29,6 @@ class CourseService {
       final cookies = prefs.getString('cookies') ?? '';
 
       _dio.options.headers['Cookie'] = cookies;
-      // Many university systems check User-Agent and Referer
       _dio.options.headers['User-Agent'] =
           'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1 Edg/89.0.4389.72';
       _dio.options.headers['Referer'] =
@@ -44,7 +42,6 @@ class CourseService {
 
       if (response.statusCode == 200) {
         final data = response.data; // automatic json decoding by Dio usually
-        // If it's a string, decode it
         final Map<String, dynamic> json = (data is String)
             ? jsonDecode(data)
             : data;
@@ -61,13 +58,10 @@ class CourseService {
   }
 
   Course _parseUndergraduateCourse(Map<String, dynamic> json) {
-    // "jcs": "1-2" -> start=1, step=2
     final startStep = WeekUtils.getStartAndStep(json['jcs'] as String? ?? '');
 
-    // "zcd": "1-16(双)" -> week code
     final weekCode = WeekUtils.parseWeekCode(json['zcd'] as String? ?? '');
 
-    // Calculate derived fields from weekCode
     int startWeek = 1;
     int endWeek = 16;
     bool isOdd = false;
@@ -88,13 +82,11 @@ class CourseService {
           }
         }
       }
-      // If ONLY has odd, then isOdd=true. If ONLY has even, isEven=true.
       if (hasOdd && !hasEven) isOdd = true;
       if (hasEven && !hasOdd) isEven = true;
     }
 
     return Course(
-      // id is auto-increment
       courseId: json['kch_id'] as String? ?? '',
       courseName: json['kcmc'] as String? ?? '未知课程',
       teacher: json['xm'] as String? ?? '未知教师',

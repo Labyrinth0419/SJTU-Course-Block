@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import '../../core/providers/course_provider.dart';
 import '../widgets/schedule_grid.dart';
 import '../course/add_course_screen.dart';
+import 'dart:io';
 import '../settings/schedule_management_screen.dart';
 import '../settings/schedule_settings_screen.dart';
+import '../../main.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,9 +15,10 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  late PageController _pageController;
-  final bool _isInit = true; // Unused, can remove later, but keeping for now
+class _HomeScreenState extends State<HomeScreen>
+    with RouteAware, WidgetsBindingObserver {
+  PageController? _pageController;
+  bool _controllerReady = false;
 
   String _weekDayToString(int weekDay) {
     const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -25,39 +28,44 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
-    // Load courses on startup
+    WidgetsBinding.instance.addObserver(this);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CourseProvider>().loadCourses().then((_) {
-        // Initialize page controller after load
         if (mounted) {
           final currentWeek = context.read<CourseProvider>().currentWeek;
-          if (_pageController.hasClients) {
-            _pageController.jumpToPage(currentWeek - 1);
-          }
+          setState(() {
+            _pageController = PageController(initialPage: currentWeek - 1);
+            _controllerReady = true;
+          });
         }
       });
     });
+
+    context.read<CourseProvider>().addListener(_providerListener);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Listen for week changes that might come from other widgets (like Settings)
+    final ModalRoute? route = ModalRoute.of(context);
+    if (route != null) {
+      routeObserver.subscribe(this, route as PageRoute);
+    }
+
     final currentWeek = context.watch<CourseProvider>().currentWeek;
-    if (_pageController.hasClients &&
-        _pageController.page?.round() != currentWeek - 1) {
-      // Avoid animation loop if the change came from the page view itself
-      // But provider doesn't tell us source.
-      // However, onPageChanged updates provider. So provider matches page.
-      // If provider mismatches page, it means external change.
-      _pageController.jumpToPage(currentWeek - 1);
+    if (_pageController?.hasClients == true &&
+        _pageController!.page?.round() != currentWeek - 1) {
+      _pageController!.jumpToPage(currentWeek - 1);
     }
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    context.read<CourseProvider>().removeListener(_providerListener);
+    routeObserver.unsubscribe(this);
+    _pageController?.dispose();
     super.dispose();
   }
 
@@ -71,15 +79,26 @@ class _HomeScreenState extends State<HomeScreen> {
             final week = provider.currentWeek;
             final now = DateTime.now();
             final termText = schedule != null ? schedule.name : '未设置课表';
-            // Simple date format: 2月25日 星期二
             final dateText =
                 "${now.month}月${now.day}日 ${_weekDayToString(now.weekday)}";
 
             String statusText = '';
-            if (week < 1) {
-              statusText = '(学期未开始)';
-            } else if (week > provider.totalWeeks) {
-              statusText = '(学期已结束)';
+            final start = schedule?.startDate;
+            if (start != null) {
+              final end = start.add(
+                Duration(days: provider.totalWeeks * 7 - 1),
+              );
+              if (now.isBefore(start)) {
+                statusText = '(学期未开始)';
+              } else if (now.isAfter(end)) {
+                statusText = '(学期已结束)';
+              }
+            } else {
+              if (week < 1) {
+                statusText = '(学期未开始)';
+              } else if (week > provider.totalWeeks) {
+                statusText = '(学期已结束)';
+              }
             }
 
             return Column(
@@ -106,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 context,
                 MaterialPageRoute(builder: (_) => const AddCourseScreen()),
               ).then((_) {
-                context.read<CourseProvider>().loadCourses();
+                context.read<CourseProvider>().loadCourses(recalcWeek: false);
               });
             },
           ),
@@ -179,22 +198,22 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      resizeToAvoidBottomInset: false, // Prevent keyboard from resizing the UI
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Consumer<CourseProvider>(
           builder: (context, provider, child) {
-            if (provider.isLoading) {
+            if (provider.isLoading || !_controllerReady) {
               return const Center(child: CircularProgressIndicator());
             }
 
             return PageView.builder(
-              controller: _pageController,
+              controller: _pageController!,
               onPageChanged: (index) {
                 if (provider.currentWeek != index + 1) {
                   provider.setCurrentWeek(index + 1);
                 }
               },
-              itemCount: 24, // Typically semesters are ~20-24 weeks
+              itemCount: provider.totalWeeks,
               itemBuilder: (context, index) {
                 return ScheduleGrid(
                   courses: provider.courses,
@@ -209,13 +228,48 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _providerListener() {
+    if (!mounted || _pageController == null) return;
+    final provider = context.read<CourseProvider>();
+    final target = provider.currentWeek - 1;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pageController == null) return;
+      if (_pageController!.page?.round() != target) {
+        _pageController!.jumpToPage(target);
+      }
+    });
+  }
+
+  void _ensureCorrectPage() {
+    if (_pageController?.hasClients != true) return;
+    final provider = context.read<CourseProvider>();
+    final maxPage = provider.totalWeeks - 1;
+    final currentPage = _pageController!.page ?? _pageController!.initialPage;
+    if (currentPage < 0 || currentPage > maxPage) {
+      final target = provider.currentWeek - 1;
+      _pageController!.jumpToPage(target);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      context.read<CourseProvider>().loadCourses().then((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _ensureCorrectPage();
+        });
+      });
+    }
+  }
+
+  @override
+  void didPopNext() {
+    _ensureCorrectPage();
+  }
+
   void _showSyncDialog(BuildContext context) {
     final now = DateTime.now();
     int currentYear = now.year;
-    // Default logic:
-    // If Month >= 8 (Aug) -> Autumn (1st term) -> use current year
-    // If Month < 8 (e.g. Feb) -> Spring (2nd term) -> use prev year
-    // e.g. Feb 2026 is usually 2025-2026 term 2.
     if (now.month < 8) {
       currentYear = currentYear - 1;
     }

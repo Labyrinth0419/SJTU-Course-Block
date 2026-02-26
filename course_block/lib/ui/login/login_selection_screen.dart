@@ -1,4 +1,3 @@
-// lib/ui/login/login_selection_screen.dart
 import 'package:flutter/material.dart';
 import 'webview_login_screen.dart';
 
@@ -32,8 +31,8 @@ class LoginSelectionScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () {
-                Navigator.push(
+              onPressed: () async {
+                final result = await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const WebviewLoginScreen(
@@ -43,6 +42,9 @@ class LoginSelectionScreen extends StatelessWidget {
                     ),
                   ),
                 );
+                if (result == true && context.mounted) {
+                  Navigator.pop(context, true);
+                }
               },
               child: const Text('研究生教务系统登录'),
             ),

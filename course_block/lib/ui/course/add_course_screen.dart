@@ -1,4 +1,3 @@
-// lib/ui/course/add_course_screen.dart
 import 'package:flutter/material.dart';
 import '../../core/models/course.dart';
 import '../../core/db/database_helper.dart';
@@ -36,7 +35,6 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
     _teacherController = TextEditingController(
       text: widget.course?.teacher ?? '',
     );
-    // ... rest of controllers ...
     _roomController = TextEditingController(
       text: widget.course?.classRoom ?? '',
     );

@@ -1,4 +1,3 @@
-// lib/core/db/database_helper.dart
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/course.dart';
@@ -58,11 +57,9 @@ class DatabaseHelper {
     ''');
   }
 
-  // --- Schedule Methods ---
 
   Future<int> insertSchedule(Schedule schedule) async {
     final db = await instance.database;
-    // If setting as current, unset others first
     if (schedule.isCurrent) {
       await db.update('schedules', {'isCurrent': 0});
     }
@@ -84,7 +81,6 @@ class DatabaseHelper {
 
   Future<int> deleteSchedule(int id) async {
     final db = await instance.database;
-    // Manual delete courses first to ensure clean state if FK not enabled
     await db.delete('courses', where: 'scheduleId = ?', whereArgs: [id]);
     return await db.delete('schedules', where: 'id = ?', whereArgs: [id]);
   }
@@ -122,7 +118,6 @@ class DatabaseHelper {
     });
   }
 
-  // --- Course Methods ---
 
   Future<int> insertCourse(Course course) async {
     final db = await instance.database;
