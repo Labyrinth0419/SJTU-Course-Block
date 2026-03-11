@@ -383,11 +383,14 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> addSchedule(String name, String year, String term) async {
+    final today = normalizeDate(DateTime.now());
+    final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
     final schedule = Schedule(
       name: name,
       year: year,
       term: term,
-      startDate: normalizeDate(DateTime.now()),
+      startDate:
+          startOfWeek, // Align to Monday so week-based offsets are correct
       isCurrent: true, // Switch to it immediately
     );
     await DatabaseHelper.instance.insertSchedule(schedule);

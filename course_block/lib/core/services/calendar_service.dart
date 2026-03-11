@@ -47,7 +47,12 @@ class CalendarService {
     final calendar = await _pickWritableCalendar();
     if (calendar == null) return 0;
 
-    final normalizedStart = normalizeDate(startDate);
+    // Align startDate to the Monday of its week, so that dayOfWeek offsets
+    // are always calculated from a Monday baseline.
+    final normalized = normalizeDate(startDate);
+    final normalizedStart = normalized.subtract(
+      Duration(days: normalized.weekday - 1),
+    );
 
     int created = 0;
     for (final course in courses) {
@@ -65,6 +70,16 @@ class CalendarService {
         count = ((course.endWeek - course.startWeek) / 2).floor() + 1;
       }
 
+      // Build the recurrence rule only when there are multiple occurrences.
+      RecurrenceRule? recurrenceRule;
+      if (count > 1) {
+        recurrenceRule = RecurrenceRule(
+          RecurrenceFrequency.Weekly,
+          interval: interval,
+          totalOccurrences: count,
+        );
+      }
+
       final event = Event(
         calendar.id,
         title: course.courseName,
@@ -72,11 +87,7 @@ class CalendarService {
         location: course.classRoom,
         start: _toTz(start),
         end: _toTz(end),
-        recurrenceRule: RecurrenceRule(
-          RecurrenceFrequency.Weekly,
-          interval: interval,
-          totalOccurrences: count,
-        ),
+        recurrenceRule: recurrenceRule,
       );
 
       final result = await _deviceCalendarPlugin.createOrUpdateEvent(event);
