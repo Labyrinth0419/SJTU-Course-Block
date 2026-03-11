@@ -11,15 +11,15 @@ class WidgetSyncService {
 
   static final WidgetSyncService instance = WidgetSyncService._();
 
-  static const List<String> _weekdays = [
+  static const List<String> _weekdaysShort = [
     '', // index 0 unused
-    '周一',
-    '周二',
-    '周三',
-    '周四',
-    '周五',
-    '周六',
-    '周日',
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
   ];
 
   /// Push today's courses to the Android home widget.
@@ -37,17 +37,18 @@ class WidgetSyncService {
     if (currentWeek < 1) currentWeek = 1;
     if (currentWeek > totalWeeks) currentWeek = totalWeeks;
 
-    final weekdayName = _weekdays[today.weekday]; // weekday is 1–7
+    final weekdayShort = _weekdaysShort[today.weekday]; // weekday is 1–7
 
+    final now = DateTime.now();
     final todayCourses =
         courses
             .where((c) => _isCourseInWeek(c, currentWeek))
             .where((c) => c.dayOfWeek == today.weekday)
+            .where((c) => _courseEndTime(today, c).isAfter(now))
             .toList()
           ..sort((a, b) => a.startNode.compareTo(b.startNode));
 
     final payload = todayCourses
-        .take(3)
         .map(
           (c) => {
             'name': c.courseName,
@@ -57,13 +58,29 @@ class WidgetSyncService {
         )
         .toList();
 
-    final subtitle = '第$currentWeek周 $weekdayName  ${today.month}/${today.day}';
+    final subtitle = '${today.month}.${today.day}  $weekdayShort';
 
     await HomeWidget.saveWidgetData('today_header', schedule.name);
     await HomeWidget.saveWidgetData('today_subtitle', subtitle);
     await HomeWidget.saveWidgetData('today_list', jsonEncode(payload));
 
     await HomeWidget.updateWidget(androidName: 'widget.TodayWidgetProvider');
+  }
+
+  /// 返回某门课的结束时刻（DateTime）。
+  DateTime _courseEndTime(DateTime baseDate, Course course) {
+    final endIdx = (course.startNode + course.step - 2).clamp(
+      0,
+      kClassEndTimes.length - 1,
+    );
+    final parts = kClassEndTimes[endIdx].split(':');
+    return DateTime(
+      baseDate.year,
+      baseDate.month,
+      baseDate.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
   }
 
   /// 将节次号和步长转换为 "HH:mm-HH:mm" 格式字符串，例如 "08:00-09:40"。

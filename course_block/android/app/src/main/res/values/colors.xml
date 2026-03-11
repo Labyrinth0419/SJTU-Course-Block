@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Widget: 日间配色 -->
+    <color name="widget_background">#FFFFFF</color>
+    <color name="widget_header_text">#1A1A1A</color>
+    <color name="widget_subtitle_text">#757575</color>
+    <color name="widget_course_title">#212121</color>
+    <color name="widget_course_detail">#616161</color>
+    <color name="widget_divider">#EEEEEE</color>
+    <color name="widget_empty_text">#BDBDBD</color>
+    <color name="widget_accent">#D32F2F</color>
+    <color name="widget_open_btn">#D32F2F</color>
+</resources>

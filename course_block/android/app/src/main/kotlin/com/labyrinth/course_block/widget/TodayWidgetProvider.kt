@@ -7,12 +7,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
 import com.labyrinth.course_block.MainActivity
 import com.labyrinth.course_block.R
-import org.json.JSONArray
 
 class TodayWidgetProvider : AppWidgetProvider() {
 
@@ -39,6 +39,10 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 ComponentName(context, TodayWidgetProvider::class.java)
             )
             onUpdate(context, manager, ids)
+            // 通知 ListView 数据已变更，触发 CourseWidgetFactory.onDataSetChanged
+            for (id in ids) {
+                manager.notifyAppWidgetViewDataChanged(id, R.id.widget_list_view)
+            }
         } else {
             super.onReceive(context, intent)
         }
@@ -82,56 +86,22 @@ class TodayWidgetProvider : AppWidgetProvider() {
         views.setTextViewText(R.id.tv_header,   header)
         views.setTextViewText(R.id.tv_subtitle, subtitle)
 
-        applyList(listJson, views)
+        // 绑定可滚动 ListView 适配器
+        // 每个 widgetId 使用独立 URI，避免多实例时 PendingIntent 被复用
+        val serviceIntent = Intent(context, CourseWidgetService::class.java).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+            data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+        }
+        views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
+        // 当列表为空时自动显示空状态视图
+        views.setEmptyView(R.id.widget_list_view, R.id.tv_empty)
+
         attachOpenIntent(context, views)
         attachRefreshIntent(context, widgetId, views)
 
         appWidgetManager.updateAppWidget(widgetId, views)
+        appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list_view)
         Log.d(TAG, "Widget $widgetId updated successfully")
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // 课程列表填充
-    // ──────────────────────────────────────────────────────────────────────────
-
-    private val titleIds  = listOf(R.id.row1_title,  R.id.row2_title,  R.id.row3_title)
-    private val detailIds = listOf(R.id.row1_detail, R.id.row2_detail, R.id.row3_detail)
-
-    private fun applyList(listJson: String, views: RemoteViews) {
-        val arr = try {
-            JSONArray(listJson)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to parse today_list JSON: $listJson", e)
-            JSONArray()
-        }
-
-        for (i in titleIds.indices) {
-            if (i < arr.length()) {
-                val obj        = arr.getJSONObject(i)
-                val name       = obj.optString("name",      "")
-                val room       = obj.optString("room",      "")
-                val timeRange  = obj.optString("timeRange", "")
-
-                val titleText = if (timeRange.isNotEmpty()) {
-                    "$timeRange  $name"
-                } else {
-                    name.ifEmpty { "--" }
-                }
-                val detailText = if (room.isNotEmpty()) "@$room" else ""
-
-                views.setTextViewText(titleIds[i],  titleText)
-                views.setTextViewText(detailIds[i], detailText)
-                views.setViewVisibility(titleIds[i],  View.VISIBLE)
-                views.setViewVisibility(detailIds[i], View.VISIBLE)
-            } else {
-                views.setViewVisibility(titleIds[i],  View.GONE)
-                views.setViewVisibility(detailIds[i], View.GONE)
-            }
-        }
-
-        val isEmpty = arr.length() == 0
-        views.setViewVisibility(R.id.tv_empty,        if (isEmpty) View.VISIBLE else View.GONE)
-        views.setViewVisibility(R.id.list_container,  if (isEmpty) View.GONE    else View.VISIBLE)
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -181,9 +151,9 @@ class TodayWidgetProvider : AppWidgetProvider() {
         try {
             val fallback = RemoteViews(context.packageName, R.layout.widget_today)
             fallback.setTextViewText(R.id.tv_header,   "课程表")
-            fallback.setTextViewText(R.id.tv_subtitle, "点击刷新或打开应用")
-            fallback.setViewVisibility(R.id.list_container, View.GONE)
-            fallback.setViewVisibility(R.id.tv_empty,       View.VISIBLE)
+            fallback.setTextViewText(R.id.tv_subtitle, "点击刷新")
+            fallback.setViewVisibility(R.id.tv_empty,        View.VISIBLE)
+            fallback.setViewVisibility(R.id.widget_list_view, View.GONE)
             attachOpenIntent(context, fallback)
             attachRefreshIntent(context, widgetId, fallback)
             appWidgetManager.updateAppWidget(widgetId, fallback)

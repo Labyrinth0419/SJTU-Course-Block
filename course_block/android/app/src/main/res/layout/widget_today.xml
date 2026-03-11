@@ -1,14 +1,17 @@
-<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFFFFF"
+    android:background="@drawable/widget_today_bg"
     android:orientation="vertical"
-    android:padding="12dp"
+    android:paddingLeft="10dp"
+    android:paddingRight="10dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="8dp"
 >
 
-    <!-- 头部：课表名称 + 周次日期 + 刷新按钮 -->
+    <!-- 紧凑头部：课表名 · 周次日期（单行，刷新移至左下角） -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -16,182 +19,116 @@
         android:orientation="horizontal"
     >
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/tv_header"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="今日课程"
+            android:textColor="@color/widget_header_text"
+            android:textSize="12sp"
+            android:textStyle="bold"
+        />
+
+        <!-- 分隔点 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
+            android:text="·"
+            android:textColor="@color/widget_subtitle_text"
+            android:textSize="11sp"
+        />
+
+        <TextView
+            android:id="@+id/tv_subtitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical"
-        >
-
-            <TextView
-                android:id="@+id/tv_header"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text="今日课程"
-                android:textColor="#1A1A1A"
-                android:textSize="15sp"
-                android:textStyle="bold"
-            />
-
-            <TextView
-                android:id="@+id/tv_subtitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="第1周 周一 1/1"
-                android:textColor="#9E9E9E"
-                android:textSize="11sp"
-            />
-
-        </LinearLayout>
-
-        <!-- 刷新按钮 -->
-        <TextView
-            android:id="@+id/btn_refresh"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingLeft="8dp"
-            android:paddingRight="4dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:text="↻"
-            android:textColor="#E53935"
-            android:textSize="20sp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="第1周 周一"
+            android:textColor="@color/widget_subtitle_text"
+            android:textSize="11sp"
         />
 
     </LinearLayout>
 
-    <!-- 分割线（TextView 替代 View，避免 Vivo OriginOS RemoteViews inflate 失败）-->
+    <!-- 分割线（TextView 替代 View，避免 Vivo OriginOS inflate 失败）-->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="6dp"
-        android:background="#EEEEEE"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="3dp"
+        android:background="@color/widget_divider"
     />
 
-    <!-- 课程列表容器（有课时显示，无课时隐藏）-->
-    <LinearLayout
-        android:id="@+id/list_container"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-    >
-
-        <!-- 第 1 门课 -->
-        <TextView
-            android:id="@+id/row1_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="--"
-            android:textColor="#212121"
-            android:textSize="13sp"
-            android:textStyle="bold"
-        />
-
-        <TextView
-            android:id="@+id/row1_detail"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text=""
-            android:textColor="#9E9E9E"
-            android:textSize="11sp"
-        />
-
-        <!-- 第 2 门课 -->
-        <TextView
-            android:id="@+id/row2_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="--"
-            android:textColor="#212121"
-            android:textSize="13sp"
-            android:textStyle="bold"
-        />
-
-        <TextView
-            android:id="@+id/row2_detail"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text=""
-            android:textColor="#9E9E9E"
-            android:textSize="11sp"
-        />
-
-        <!-- 第 3 门课 -->
-        <TextView
-            android:id="@+id/row3_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="--"
-            android:textColor="#212121"
-            android:textSize="13sp"
-            android:textStyle="bold"
-        />
-
-        <TextView
-            android:id="@+id/row3_detail"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text=""
-            android:textColor="#9E9E9E"
-            android:textSize="11sp"
-        />
-
-    </LinearLayout>
-
-    <!-- 空状态（无课时显示）-->
-    <TextView
-        android:id="@+id/tv_empty"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:paddingTop="14dp"
-        android:paddingBottom="14dp"
-        android:text="今日暂无课程"
-        android:textColor="#BDBDBD"
-        android:textSize="12sp"
-    />
-
-    <!-- Spacer：撑开剩余空间，将底部操作行推至底部 -->
-    <TextView
+    <!-- 可滚动课程列表（填满剩余空间，支持上下拨动） -->
+    <ListView
+        android:id="@+id/widget_list_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:divider="@null"
+        android:dividerHeight="0dp"
+        android:scrollbars="none"
+    />
+
+    <!-- 空状态（adapter 为空时由 setEmptyView 自动显示） -->
+    <TextView
+        android:id="@+id/tv_empty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="今日暂无课程 ☀"
+        android:textColor="@color/widget_empty_text"
+        android:textSize="12sp"
+        android:visibility="gone"
     />
 
     <!-- 底部分割线 -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginBottom="6dp"
-        android:background="#EEEEEE"
+        android:layout_marginBottom="4dp"
+        android:background="@color/widget_divider"
     />
 
-    <!-- 底部操作行：打开应用 -->
-    <TextView
-        android:id="@+id/btn_open"
+    <!-- 底部操作行：刷新（左）+ 打开应用（右） -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="end"
-        android:text="打开应用 →"
-        android:textColor="#E53935"
-        android:textSize="12sp"
-    />
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+    >
+
+        <TextView
+            android:id="@+id/btn_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="↻"
+            android:textColor="@color/widget_accent"
+            android:textSize="14sp"
+        />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+        />
+
+        <TextView
+            android:id="@+id/btn_open"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="打开 →"
+            android:textColor="@color/widget_open_btn"
+            android:textSize="11sp"
+        />
+
+    </LinearLayout>
 
 </LinearLayout>

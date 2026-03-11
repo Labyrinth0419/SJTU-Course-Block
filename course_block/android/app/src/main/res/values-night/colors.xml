@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Widget: 深色模式配色 -->
+    <color name="widget_background">#1C1C1E</color>
+    <color name="widget_header_text">#F5F5F5</color>
+    <color name="widget_subtitle_text">#9E9E9E</color>
+    <color name="widget_course_title">#E0E0E0</color>
+    <color name="widget_course_detail">#9E9E9E</color>
+    <color name="widget_divider">#2C2C2E</color>
+    <color name="widget_empty_text">#5A5A5A</color>
+    <color name="widget_accent">#EF5350</color>
+    <color name="widget_open_btn">#EF5350</color>
+</resources>

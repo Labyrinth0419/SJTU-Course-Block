@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 3行课程 row：时间 / 课程名 / 地点，供 ListView RemoteViewsAdapter 使用 -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp"
+>
+
+    <!-- 左侧彩色强调条 -->
+    <TextView
+        android:layout_width="3dp"
+        android:layout_height="42dp"
+        android:background="@drawable/widget_course_bar"
+        android:layout_marginEnd="8dp"
+    />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+    >
+
+        <!-- 第1行：时间段 -->
+        <TextView
+            android:id="@+id/row_time"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text=""
+            android:textColor="@color/widget_accent"
+            android:textSize="10sp"
+        />
+
+        <!-- 第2行：课程名称 -->
+        <TextView
+            android:id="@+id/row_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="--"
+            android:textColor="@color/widget_course_title"
+            android:textSize="12sp"
+            android:textStyle="bold"
+        />
+
+        <!-- 第3行：地点 -->
+        <TextView
+            android:id="@+id/row_detail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text=""
+            android:textColor="@color/widget_course_detail"
+            android:textSize="10sp"
+        />
+
+    </LinearLayout>
+
+</LinearLayout>

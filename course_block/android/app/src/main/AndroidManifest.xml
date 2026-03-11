@@ -59,6 +59,13 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_today_info" />
         </receiver>
+
+        <!-- 为桌面小组件 ListView 提供滚动数据的 Remote Views Service -->
+        <service
+            android:name="com.labyrinth.course_block.widget.CourseWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
         <!-- START AUTO ICONS -->
 
         <!-- alias for ic_launcher_an_an (auto-generated) -->
