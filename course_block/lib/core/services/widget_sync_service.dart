@@ -63,8 +63,127 @@ class WidgetSyncService {
     await HomeWidget.saveWidgetData('today_header', schedule.name);
     await HomeWidget.saveWidgetData('today_subtitle', subtitle);
     await HomeWidget.saveWidgetData('today_list', jsonEncode(payload));
-
     await HomeWidget.updateWidget(androidName: 'widget.TodayWidgetProvider');
+
+    // ── day_list：今天全部课程（含已结束），携带 status 字段 ──────────────────
+    final allTodayCourses =
+        courses
+            .where((c) => _isCourseInWeek(c, currentWeek))
+            .where((c) => c.dayOfWeek == today.weekday)
+            .toList()
+          ..sort((a, b) => a.startNode.compareTo(b.startNode));
+
+    final dayPayload = allTodayCourses.map((c) {
+      final end = _courseEndTime(today, c);
+      final start2 = _courseStartDateTime(today, c);
+      final String status;
+      if (end.isBefore(now)) {
+        status = 'done';
+      } else if (start2.isBefore(now)) {
+        status = 'current';
+      } else {
+        status = 'upcoming';
+      }
+      return {
+        'name': c.courseName,
+        'room': c.classRoom,
+        'timeRange': _formatTimeRange(c.startNode, c.step),
+        'status': status,
+      };
+    }).toList();
+
+    await HomeWidget.saveWidgetData('day_list', jsonEncode(dayPayload));
+    await HomeWidget.updateWidget(androidName: 'widget.DayWidgetProvider');
+
+    // ── upcoming_list：近 3 天课程（含今日剩余），带日期标题 ──────────────────
+    final upcomingItems = <Map<String, String>>[];
+    for (int offset = 0; offset < 3; offset++) {
+      final date = today.add(Duration(days: offset));
+      final diffOff = date.difference(start).inDays;
+      final weekOff = ((diffOff / 7).floor() + 1).clamp(1, totalWeeks);
+
+      final dayCourses =
+          courses
+              .where((c) => _isCourseInWeek(c, weekOff))
+              .where((c) => c.dayOfWeek == date.weekday)
+              .where(
+                (c) =>
+                    offset == 0 ? _courseEndTime(date, c).isAfter(now) : true,
+              )
+              .toList()
+            ..sort((a, b) => a.startNode.compareTo(b.startNode));
+
+      if (dayCourses.isEmpty) continue;
+
+      final dayLabel = offset == 0
+          ? 'Today ${date.month}.${date.day}'
+          : offset == 1
+          ? 'Tmr ${date.month}.${date.day}'
+          : '${_weekdaysShort[date.weekday]} ${date.month}.${date.day}';
+      upcomingItems.add({'t': 'header', 'label': dayLabel});
+      for (final c in dayCourses) {
+        upcomingItems.add({
+          't': 'course',
+          'name': c.courseName,
+          'room': c.classRoom,
+          'timeRange': _formatTimeRange(c.startNode, c.step),
+        });
+      }
+    }
+
+    await HomeWidget.saveWidgetData('upcoming_list', jsonEncode(upcomingItems));
+    await HomeWidget.updateWidget(androidName: 'widget.UpcomingWidgetProvider');
+
+    // ── week_list：本周（周一到周日）课程，带日期标题 ─────────────────────────
+    final weekItems = <Map<String, String>>[];
+    final mondayOffset = -(today.weekday - 1);
+    for (int i = 0; i < 7; i++) {
+      final date = today.add(Duration(days: mondayOffset + i));
+      final diffW = date.difference(start).inDays;
+      final weekW = ((diffW / 7).floor() + 1).clamp(1, totalWeeks);
+      final wd = i + 1; // 1=Mon … 7=Sun
+
+      final dayCourses =
+          courses
+              .where((c) => _isCourseInWeek(c, weekW))
+              .where((c) => c.dayOfWeek == wd)
+              .toList()
+            ..sort((a, b) => a.startNode.compareTo(b.startNode));
+
+      if (dayCourses.isEmpty) continue;
+
+      final isToday = wd == today.weekday;
+      final label =
+          '${_weekdaysShort[wd]}${isToday ? ' ●' : ''} ${date.month}.${date.day}';
+      weekItems.add({'t': 'header', 'label': label});
+      for (final c in dayCourses) {
+        weekItems.add({
+          't': 'course',
+          'name': c.courseName,
+          'room': c.classRoom,
+          'timeRange': _formatTimeRange(c.startNode, c.step),
+        });
+      }
+    }
+
+    await HomeWidget.saveWidgetData('week_list', jsonEncode(weekItems));
+    await HomeWidget.updateWidget(androidName: 'widget.WeekWidgetProvider');
+  }
+
+  /// 返回某门课的开始时刻（DateTime）。
+  DateTime _courseStartDateTime(DateTime baseDate, Course course) {
+    final startIdx = (course.startNode - 1).clamp(
+      0,
+      kClassStartTimes.length - 1,
+    );
+    final parts = kClassStartTimes[startIdx].split(':');
+    return DateTime(
+      baseDate.year,
+      baseDate.month,
+      baseDate.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
   }
 
   /// 返回某门课的结束时刻（DateTime）。

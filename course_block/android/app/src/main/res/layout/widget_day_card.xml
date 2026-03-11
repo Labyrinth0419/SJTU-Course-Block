@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 日视图课程卡片：全宽彩色背景，动态着色（done/current/upcoming），供 ListView 使用 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/day_card_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingLeft="10dp"
+    android:paddingRight="10dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
+    android:layout_marginTop="2dp"
+    android:layout_marginBottom="2dp">
+
+    <!-- 课程名（颜色由 Factory 动态设置） -->
+    <TextView
+        android:id="@+id/day_card_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="--"
+        android:textColor="@color/widget_course_title"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <!-- 地点 + 时间（合并显示） -->
+    <TextView
+        android:id="@+id/day_card_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text=""
+        android:textColor="@color/widget_course_detail"
+        android:textSize="10sp" />
+
+</LinearLayout>

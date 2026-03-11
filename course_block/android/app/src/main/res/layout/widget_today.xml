@@ -21,8 +21,9 @@
 
         <TextView
             android:id="@+id/tv_header"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
             android:text="今日课程"
@@ -31,27 +32,15 @@
             android:textStyle="bold"
         />
 
-        <!-- 分隔点 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingLeft="2dp"
-            android:paddingRight="2dp"
-            android:text="·"
-            android:textColor="@color/widget_subtitle_text"
-            android:textSize="11sp"
-        />
-
         <TextView
             android:id="@+id/tv_subtitle"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="第1周 周一"
+            android:text="3.11  第1周  Wed"
             android:textColor="@color/widget_subtitle_text"
-            android:textSize="11sp"
+            android:textSize="10sp"
         />
 
     </LinearLayout>

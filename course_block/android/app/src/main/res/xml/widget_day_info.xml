@@ -2,12 +2,12 @@
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/widget_today"
     android:minWidth="110dp"
-    android:minHeight="110dp"
+    android:minHeight="146dp"
     android:targetCellWidth="2"
-    android:targetCellHeight="2"
+    android:targetCellHeight="3"
     android:updatePeriodMillis="0"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
-    android:previewImage="@drawable/widget_preview_today"
+    android:previewImage="@drawable/widget_preview_day"
     android:previewLayout="@layout/widget_preview"
-    android:description="@string/widget_today_description" />
+    android:description="@string/widget_day_description" />

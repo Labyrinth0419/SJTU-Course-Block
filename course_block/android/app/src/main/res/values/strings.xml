@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="widget_today_description">显示今日课程的桌面小组件</string>
+    <string name="widget_today_label">今日课程</string>
+    <string name="widget_upcoming_label">近日课程</string>
+    <string name="widget_week_label">一周课程</string>
+    <string name="widget_day_label">日视图</string>
+
+    <string name="widget_today_description">显示今日待上课程的桌面小组件</string>
+    <string name="widget_upcoming_description">显示近几日课程的桌面小组件</string>
+    <string name="widget_week_description">显示本周全部课程的桌面小组件</string>
+    <string name="widget_day_description">显示今日全部课程日程的桌面小组件</string>
 </resources>

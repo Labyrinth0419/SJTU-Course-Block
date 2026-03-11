@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 深色背景衬托，使 widget 圆角清晰可见 -->
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#333333"
+    android:padding="36dp"
+>
+    <include
+        layout="@layout/widget_preview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+    />
+</FrameLayout>

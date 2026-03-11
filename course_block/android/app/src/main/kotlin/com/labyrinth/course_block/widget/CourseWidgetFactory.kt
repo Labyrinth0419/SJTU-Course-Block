@@ -81,14 +81,17 @@ class CourseWidgetFactory(
     override fun getLoadingView(): RemoteViews? = null
 
     override fun getViewAt(position: Int): RemoteViews {
-        val item = items.getOrNull(position) ?: CourseItem("", "--", "")
-        val rv   = RemoteViews(context.packageName, R.layout.widget_course_row)
+        val item  = items.getOrNull(position) ?: CourseItem("", "--", "")
+        val rv    = RemoteViews(context.packageName, R.layout.widget_course_row)
+        val color = WidgetColors.forCourse(item.name)
 
-        rv.setTextViewText(R.id.row_time,   item.timeRange)
         rv.setTextViewText(R.id.row_title,  item.name)
         rv.setTextViewText(R.id.row_detail, if (item.room.isNotEmpty()) "📍 ${item.room}" else "")
-        rv.setViewVisibility(R.id.row_time,   if (item.timeRange.isEmpty()) View.GONE else View.VISIBLE)
+        rv.setTextViewText(R.id.row_time,   item.timeRange)
+        rv.setInt(R.id.row_bar,  "setBackgroundColor", color)
+        rv.setTextColor(R.id.row_time, color)
         rv.setViewVisibility(R.id.row_detail, if (item.room.isEmpty())      View.GONE else View.VISIBLE)
+        rv.setViewVisibility(R.id.row_time,   if (item.timeRange.isEmpty()) View.GONE else View.VISIBLE)
         return rv
     }
 }

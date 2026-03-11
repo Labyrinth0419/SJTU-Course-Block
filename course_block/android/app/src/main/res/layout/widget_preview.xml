@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 小组件选取器预览布局（静态占位数据，不依赖 RemoteViewsAdapter） -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_today_bg"
+    android:orientation="vertical"
+    android:paddingLeft="10dp"
+    android:paddingRight="10dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="8dp"
+>
+
+    <!-- 头部：课表名（左）+ 日期第X周（右） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+    >
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="今日课程"
+            android:textColor="@color/widget_header_text"
+            android:textSize="12sp"
+            android:textStyle="bold"
+        />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="3.11  第3周  Wed"
+            android:textColor="@color/widget_subtitle_text"
+            android:textSize="10sp"
+        />
+    </LinearLayout>
+
+    <!-- 分割线 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="3dp"
+        android:background="@color/widget_divider"
+    />
+
+    <!-- 课程行 1（红色条） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp"
+        android:paddingEnd="4dp"
+    >
+        <TextView
+            android:layout_width="3dp"
+            android:layout_height="44dp"
+            android:background="#E53935"
+            android:layout_marginEnd="8dp"
+        />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+        >
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="线性代数"
+                android:textColor="@color/widget_course_title"
+                android:textSize="12sp"
+                android:textStyle="bold"
+            />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📍 上院316"
+                android:textColor="@color/widget_course_detail"
+                android:textSize="10sp"
+            />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="08:00-09:40"
+                android:textColor="#E53935"
+                android:textSize="10sp"
+            />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 课程行 2（蓝色条） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp"
+        android:paddingEnd="4dp"
+    >
+        <TextView
+            android:layout_width="3dp"
+            android:layout_height="44dp"
+            android:background="#1E88E5"
+            android:layout_marginEnd="8dp"
+        />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+        >
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="大学物理"
+                android:textColor="@color/widget_course_title"
+                android:textSize="12sp"
+                android:textStyle="bold"
+            />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📍 东中院105"
+                android:textColor="@color/widget_course_detail"
+                android:textSize="10sp"
+            />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="10:00-11:40"
+                android:textColor="#1E88E5"
+                android:textSize="10sp"
+            />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 课程行 3（紫色条） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp"
+        android:paddingEnd="4dp"
+    >
+        <TextView
+            android:layout_width="3dp"
+            android:layout_height="44dp"
+            android:background="#8E24AA"
+            android:layout_marginEnd="8dp"
+        />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+        >
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="程序设计原理"
+                android:textColor="@color/widget_course_title"
+                android:textSize="12sp"
+                android:textStyle="bold"
+            />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📍 东上院509"
+                android:textColor="@color/widget_course_detail"
+                android:textSize="10sp"
+            />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="14:00-15:40"
+                android:textColor="#8E24AA"
+                android:textSize="10sp"
+            />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 弹性空隙 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+    />
+
+    <!-- 底部分割线 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginBottom="4dp"
+        android:background="@color/widget_divider"
+    />
+
+    <!-- 底部操作行 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+    >
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="↻"
+            android:textColor="@color/widget_accent"
+            android:textSize="14sp"
+        />
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+        />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="打开 →"
+            android:textColor="@color/widget_open_btn"
+            android:textSize="11sp"
+        />
+    </LinearLayout>
+
+</LinearLayout>

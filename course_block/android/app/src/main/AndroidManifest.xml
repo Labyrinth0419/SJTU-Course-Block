@@ -50,6 +50,7 @@
 
         <receiver
             android:name="com.labyrinth.course_block.widget.TodayWidgetProvider"
+            android:label="@string/widget_today_label"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
@@ -63,6 +64,60 @@
         <!-- 为桌面小组件 ListView 提供滚动数据的 Remote Views Service -->
         <service
             android:name="com.labyrinth.course_block.widget.CourseWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
+        <!-- 近日课程 Widget -->
+        <receiver
+            android:name="com.labyrinth.course_block.widget.UpcomingWidgetProvider"
+            android:label="@string/widget_upcoming_label"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_upcoming_info" />
+        </receiver>
+        <service
+            android:name="com.labyrinth.course_block.widget.UpcomingWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
+        <!-- 一周课程 Widget -->
+        <receiver
+            android:name="com.labyrinth.course_block.widget.WeekWidgetProvider"
+            android:label="@string/widget_week_label"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_week_info" />
+        </receiver>
+        <service
+            android:name="com.labyrinth.course_block.widget.WeekWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
+        <!-- 日视图 Widget -->
+        <receiver
+            android:name="com.labyrinth.course_block.widget.DayWidgetProvider"
+            android:label="@string/widget_day_label"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_day_info" />
+        </receiver>
+        <service
+            android:name="com.labyrinth.course_block.widget.DayWidgetService"
             android:permission="android.permission.BIND_REMOTEVIEWS"
             android:exported="false" />
 

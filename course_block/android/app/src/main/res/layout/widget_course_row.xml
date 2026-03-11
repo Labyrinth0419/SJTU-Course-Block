@@ -1,19 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 3行课程 row：时间 / 课程名 / 地点，供 ListView RemoteViewsAdapter 使用 -->
+<!-- 课程 row：课程名 / 地点 / 时间段，供 ListView RemoteViewsAdapter 使用 -->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/row_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingTop="4dp"
-    android:paddingBottom="4dp"
+    android:paddingTop="5dp"
+    android:paddingBottom="5dp"
+    android:paddingEnd="4dp"
 >
 
-    <!-- 左侧彩色强调条 -->
+    <!-- 左侧彩色强调条（颜色由 Factory 动态设置） -->
     <TextView
+        android:id="@+id/row_bar"
         android:layout_width="3dp"
-        android:layout_height="42dp"
+        android:layout_height="44dp"
         android:background="@drawable/widget_course_bar"
         android:layout_marginEnd="8dp"
     />
@@ -25,19 +28,7 @@
         android:orientation="vertical"
     >
 
-        <!-- 第1行：时间段 -->
-        <TextView
-            android:id="@+id/row_time"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text=""
-            android:textColor="@color/widget_accent"
-            android:textSize="10sp"
-        />
-
-        <!-- 第2行：课程名称 -->
+        <!-- 第1行：课程名称 -->
         <TextView
             android:id="@+id/row_title"
             android:layout_width="match_parent"
@@ -50,7 +41,7 @@
             android:textStyle="bold"
         />
 
-        <!-- 第3行：地点 -->
+        <!-- 第2行：地点 -->
         <TextView
             android:id="@+id/row_detail"
             android:layout_width="match_parent"
@@ -59,6 +50,18 @@
             android:maxLines="1"
             android:text=""
             android:textColor="@color/widget_course_detail"
+            android:textSize="10sp"
+        />
+
+        <!-- 第3行：时间段（颜色与强调条同步，由 Factory 动态设置） -->
+        <TextView
+            android:id="@+id/row_time"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text=""
+            android:textColor="@color/widget_accent"
             android:textSize="10sp"
         />
 
