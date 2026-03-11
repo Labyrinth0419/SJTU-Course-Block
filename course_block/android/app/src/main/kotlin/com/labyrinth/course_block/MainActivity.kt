@@ -6,6 +6,7 @@ import io.flutter.plugin.common.MethodChannel
 import android.content.Intent
 import android.net.Uri
 import java.io.OutputStream
+// widget support removed
 
 class MainActivity : FlutterActivity() {
     private var pendingResult: MethodChannel.Result? = null
@@ -34,6 +35,7 @@ class MainActivity : FlutterActivity() {
                 result.notImplemented()
             }
         }
+
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

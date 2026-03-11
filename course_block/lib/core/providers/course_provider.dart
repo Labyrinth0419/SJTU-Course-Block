@@ -4,15 +4,17 @@ import '../../core/db/database_helper.dart';
 import '../../core/models/course.dart';
 import '../../core/models/schedule.dart';
 import '../../core/services/course_service.dart';
-import '../../core/services/widget_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:intl/intl.dart';
+import '../utils/time_slots.dart';
+import '../services/calendar_service.dart';
+import 'package:share_plus/share_plus.dart';
+import '../services/widget_sync_service.dart';
 
 class CourseProvider extends ChangeNotifier {
   List<Course> _courses = [];
@@ -84,6 +86,7 @@ class CourseProvider extends ChangeNotifier {
   }
 
   final CourseService _courseService = CourseService();
+  final CalendarService _calendarService = CalendarService();
 
   CourseProvider() {
     _loadSettings();
@@ -224,7 +227,8 @@ class CourseProvider extends ChangeNotifier {
           );
         } else {
           final now = DateTime.now();
-          final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+          final today = normalizeDate(now);
+          final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
 
           final defaultSchedule = Schedule(
             name: '默认课表',
@@ -241,9 +245,9 @@ class CourseProvider extends ChangeNotifier {
         }
       } else {
         if (recalcWeek || _currentSchedule?.id != oldScheduleId) {
-          final diff = DateTime.now()
-              .difference(_currentSchedule!.startDate)
-              .inDays;
+          final diff = normalizeDate(
+            DateTime.now(),
+          ).difference(normalizeDate(_currentSchedule!.startDate)).inDays;
           _currentWeek = (diff / 7).floor() + 1;
           if (_currentWeek < 1) _currentWeek = 1;
           if (_currentWeek > _totalWeeks) _currentWeek = _totalWeeks;
@@ -257,14 +261,12 @@ class CourseProvider extends ChangeNotifier {
       } else {
         _courses = [];
       }
-      // sync widget after courses have been loaded successfully
-      debugPrint('CourseProvider calling WidgetService.syncTodayCourses');
-      await WidgetService.syncTodayCourses();
     } catch (e) {
       debugPrint('Error loading courses/schedules: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
+      _updateWidgetsSafe();
     }
   }
 
@@ -273,10 +275,14 @@ class CourseProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final fetchedCourses = await _courseService.fetchUndergraduateCourses(
+      var fetchedCourses = await _courseService.fetchUndergraduateCourses(
         year,
         term,
       );
+
+      if (fetchedCourses.isEmpty) {
+        fetchedCourses = await _courseService.fetchGraduateCourses(year, term);
+      }
 
       if (fetchedCourses.isEmpty) {
         return 0;
@@ -286,7 +292,8 @@ class CourseProvider extends ChangeNotifier {
 
       if (_currentSchedule == null) {
         final now = DateTime.now();
-        final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+        final today = normalizeDate(now);
+        final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
 
         final newSchedule = Schedule(
           name: '$year-$term 学期',
@@ -348,8 +355,6 @@ class CourseProvider extends ChangeNotifier {
         );
       }
       final count = fetchedCourses.length;
-      // update widget after sync operation
-      await WidgetService.syncTodayCourses();
       return count;
     } catch (e) {
       debugPrint('Error syncing courses: $e');
@@ -381,7 +386,7 @@ class CourseProvider extends ChangeNotifier {
       name: name,
       year: year,
       term: term,
-      startDate: DateTime.now(),
+      startDate: normalizeDate(DateTime.now()),
       isCurrent: true, // Switch to it immediately
     );
     await DatabaseHelper.instance.insertSchedule(schedule);
@@ -442,6 +447,29 @@ class CourseProvider extends ChangeNotifier {
     return Uint8List.fromList(utf8.encode(ics));
   }
 
+  Future<int> importToSystemCalendar() async {
+    if (_currentSchedule == null) return 0;
+    return _calendarService.importCourses(
+      _courses,
+      _currentSchedule!.startDate,
+    );
+  }
+
+  Future<bool> shareCoursesIcs() async {
+    if (_currentSchedule == null) return false;
+    final bytes = await exportCoursesIcsBytes();
+    if (bytes.isEmpty) return false;
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/course_export.ics');
+    await file.writeAsBytes(bytes, flush: true);
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'text/calendar')],
+      text: '课程表 ICS 文件，可在 ICSx5 等日历中订阅',
+      subject: 'CourseBlock 课表',
+    );
+    return true;
+  }
+
   Future<int> importCoursesJson(String path) async {
     try {
       final file = File(path);
@@ -493,9 +521,10 @@ class CourseProvider extends ChangeNotifier {
   List<Course> _parseIcs(String content, DateTime startDate) {
     final events = content.split('BEGIN:VEVENT').skip(1);
     final List<Course> list = [];
+    final normalizedStart = normalizeDate(startDate);
     for (var ev in events) {
       String? _field(String name) {
-        final reg = RegExp('$name:(.+)');
+        final reg = RegExp('$name[^:]*:(.+)');
         final m = reg.firstMatch(ev);
         return m?.group(1)?.trim();
       }
@@ -503,29 +532,51 @@ class CourseProvider extends ChangeNotifier {
       final summary = _field('SUMMARY');
       final location = _field('LOCATION');
       final dtstart = _field('DTSTART');
+      final dtend = _field('DTEND');
       final duration = _field('DURATION');
+      final rrule = _field('RRULE');
       if (summary == null || dtstart == null) continue;
-      DateTime dt;
+
+      DateTime? start;
       try {
-        dt = DateFormat("yyyyMMdd'T'HHmmss").parse(dtstart);
+        start = _parseIcsDateTime(dtstart);
       } catch (_) {
-        try {
-          dt = DateFormat("yyyyMMdd").parse(dtstart);
-        } catch (__) {
-          continue;
-        }
+        start = null;
       }
-      final diff = dt.difference(startDate).inDays;
-      final week = (diff / 7).floor() + 1;
-      final day = dt.weekday; // 1=Mon
+      if (start == null) continue;
+
+      DateTime? end;
+      if (dtend != null) {
+        end = _parseIcsDateTime(dtend);
+      }
+
+      final diff = start.difference(normalizedStart).inDays;
+      int week = (diff / 7).floor() + 1;
+      if (week < 1) week = 1;
+      final day = start.weekday; // 1=Mon
+
+      final startNode = resolveStartNode(start);
       int step = 1;
-      if (duration != null) {
+      if (end != null) {
+        final endNode = resolveEndNode(end);
+        step = (endNode - startNode + 1).clamp(1, kClassEndTimes.length);
+      } else if (duration != null) {
         final m = RegExp(r'PT(\d+)M').firstMatch(duration);
         if (m != null) {
           final mins = int.tryParse(m.group(1)!) ?? 0;
           step = (mins / 45).ceil();
         }
       }
+
+      int endWeek = week;
+      if (rrule != null) {
+        final countMatch = RegExp(r'COUNT=(\d+)').firstMatch(rrule);
+        if (countMatch != null) {
+          final cnt = int.tryParse(countMatch.group(1)!) ?? 1;
+          endWeek = week + cnt - 1;
+        }
+      }
+
       list.add(
         Course(
           scheduleId: null,
@@ -534,9 +585,9 @@ class CourseProvider extends ChangeNotifier {
           teacher: '',
           classRoom: location ?? '',
           startWeek: week,
-          endWeek: week,
+          endWeek: endWeek,
           dayOfWeek: day,
-          startNode: 1,
+          startNode: startNode,
           step: step,
           isOddWeek: false,
           isEvenWeek: false,
@@ -553,22 +604,65 @@ class CourseProvider extends ChangeNotifier {
     buffer.writeln('BEGIN:VCALENDAR');
     buffer.writeln('VERSION:2.0');
     buffer.writeln('PRODID:-//CourseBlock//EN');
+    buffer.writeln('X-WR-TIMEZONE:Asia/Shanghai');
+
+    final normalizedStart = normalizeDate(startDate);
+
     for (var course in courses) {
-      final firstDate = startDate.add(
+      final baseDate = normalizedStart.add(
         Duration(days: (course.startWeek - 1) * 7 + (course.dayOfWeek - 1)),
       );
-      final dt = DateFormat("yyyyMMdd'T'HHmmss").format(firstDate);
+
+      final start = classStartDateTime(baseDate, course.startNode);
+      final end = classEndDateTime(baseDate, course.startNode, course.step);
+
+      int interval = 1;
+      int count = course.endWeek - course.startWeek + 1;
+      if (course.isOddWeek ^ course.isEvenWeek) {
+        interval = 2;
+        count = ((course.endWeek - course.startWeek) / 2).floor() + 1;
+      }
+
       buffer.writeln('BEGIN:VEVENT');
       buffer.writeln('SUMMARY:${course.courseName}');
       buffer.writeln('LOCATION:${course.classRoom}');
-      buffer.writeln('DTSTART:$dt');
-      final durationMinutes = 45 * course.step;
-      buffer.writeln('DURATION:PT${durationMinutes}M');
-      final weeks = course.endWeek - course.startWeek + 1;
-      buffer.writeln('RRULE:FREQ=WEEKLY;COUNT=$weeks');
+      buffer.writeln('DTSTART;TZID=Asia/Shanghai:${_formatIcsDateTime(start)}');
+      buffer.writeln('DTEND;TZID=Asia/Shanghai:${_formatIcsDateTime(end)}');
+      buffer.writeln('RRULE:FREQ=WEEKLY;INTERVAL=$interval;COUNT=$count');
       buffer.writeln('END:VEVENT');
     }
     buffer.writeln('END:VCALENDAR');
     return buffer.toString();
+  }
+
+  DateTime? _parseIcsDateTime(String value) {
+    try {
+      if (value.endsWith('Z')) {
+        return DateFormat("yyyyMMdd'T'HHmmss'Z'").parseUtc(value).toLocal();
+      }
+      return DateFormat("yyyyMMdd'T'HHmmss").parseStrict(value);
+    } catch (_) {
+      try {
+        return DateFormat('yyyyMMdd').parseStrict(value);
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+
+  String _formatIcsDateTime(DateTime dt) {
+    return DateFormat("yyyyMMdd'T'HHmmss").format(dt);
+  }
+
+  Future<void> _updateWidgetsSafe() async {
+    try {
+      await WidgetSyncService.instance.updateTodayWidget(
+        _courses,
+        _currentSchedule,
+        totalWeeks: _totalWeeks,
+      );
+    } catch (e) {
+      debugPrint('Widget update error: $e');
+    }
   }
 }

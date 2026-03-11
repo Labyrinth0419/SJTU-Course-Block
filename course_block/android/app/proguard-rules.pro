@@ -8,3 +8,7 @@
 -dontwarn org.openjsse.javax.net.ssl.SSLParameters
 -dontwarn org.openjsse.javax.net.ssl.SSLSocket
 -dontwarn org.openjsse.net.ssl.OpenJSSE
+
+# Keep home widget provider and plugin classes so R8 does not strip them.
+-keep class com.labyrinth.course_block.widget.TodayWidgetProvider { *; }
+-keep class es.antonborri.home_widget.** { *; }

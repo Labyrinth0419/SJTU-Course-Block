@@ -258,7 +258,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   );
                 },
               ),
-              const Divider(),
               ListTile(
                 leading: const Icon(Icons.login),
                 title: const Text('教务系统登录'),

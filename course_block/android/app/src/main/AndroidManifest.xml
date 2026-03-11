@@ -3,6 +3,8 @@
     package="com.labyrinth.course_block">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <application
         android:label="课程表"
         android:name="${applicationName}"
@@ -13,22 +15,6 @@
             android:name="com.solusibejo.flutter_dynamic_icon_plus.FlutterDynamicIconPlusService"
             android:stopWithTask="false" />
 
-        <!-- course widget provider and remote views service -->
-        <receiver
-            android:name=".CourseWidgetProvider"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_course_info" />
-        </receiver>
-
-        <service
-            android:name=".CourseWidgetService"
-            android:permission="android.permission.BIND_REMOTEVIEWS"
-            android:exported="false" />
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
@@ -61,6 +47,17 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <receiver
+            android:name="com.labyrinth.course_block.widget.TodayWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_today_info" />
+        </receiver>
         <!-- START AUTO ICONS -->
 
         <!-- alias for ic_launcher_an_an (auto-generated) -->

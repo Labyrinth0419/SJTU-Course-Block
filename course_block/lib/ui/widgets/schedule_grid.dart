@@ -5,45 +5,12 @@ import 'package:provider/provider.dart';
 import '../../core/providers/course_provider.dart';
 import '../../core/db/database_helper.dart';
 import 'dart:io';
+import '../../core/utils/time_slots.dart';
 
 class ScheduleGrid extends StatelessWidget {
   final List<Course> courses;
   final int currentWeek;
   final DateTime? startDate;
-
-  static const List<String> startTimes = [
-    "8:00",
-    "8:55",
-    "10:00",
-    "10:55",
-    "12:00",
-    "12:55",
-    "14:00",
-    "14:55",
-    "16:00",
-    "16:55",
-    "18:00",
-    "18:55",
-    "20:00",
-    "20:55",
-  ];
-
-  static const List<String> endTimes = [
-    "8:45",
-    "9:40",
-    "10:45",
-    "11:40",
-    "12:45",
-    "13:40",
-    "14:45",
-    "15:40",
-    "16:45",
-    "17:40",
-    "18:45",
-    "19:40",
-    "20:45",
-    "21:40",
-  ];
 
   const ScheduleGrid({
     super.key,
@@ -216,14 +183,14 @@ class ScheduleGrid extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                startTimes[i],
+                                kClassStartTimes[i],
                                 style: const TextStyle(
                                   fontSize: 8,
                                   color: Colors.grey,
                                 ),
                               ),
                               Text(
-                                endTimes[i],
+                                kClassEndTimes[i],
                                 style: const TextStyle(
                                   fontSize: 8,
                                   color: Colors.grey,
@@ -528,8 +495,7 @@ class ScheduleGrid extends StatelessWidget {
     if (colorStr != null && colorStr.startsWith('#')) {
       try {
         return Color(int.parse(colorStr.replaceFirst('#', '0xFF')));
-      } catch (e) {
-      }
+      } catch (e) {}
     }
     final hash = seed.hashCode;
     final index = hash.abs() % Colors.primaries.length;

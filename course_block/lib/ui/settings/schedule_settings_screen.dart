@@ -7,7 +7,6 @@ import 'package:numberpicker/numberpicker.dart';
 import 'package:file_selector/file_selector.dart' as fs;
 import 'dart:io';
 import 'package:flutter/services.dart';
-import 'dart:typed_data';
 
 class ScheduleSettingsScreen extends StatelessWidget {
   const ScheduleSettingsScreen({super.key});
@@ -291,6 +290,38 @@ class ScheduleSettingsScreen extends StatelessWidget {
                       context,
                     ).showSnackBar(SnackBar(content: Text('已导出到 $path')));
                   }
+                },
+              ),
+              _buildSettingTile(
+                context,
+                title: '导入到系统日历 (Android)',
+                trailing: const Icon(
+                  Icons.event_available,
+                  color: Colors.green,
+                ),
+                onTap: () async {
+                  if (Theme.of(context).platform != TargetPlatform.android) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('该功能仅在安卓可用')),
+                      );
+                    }
+                    return;
+                  }
+                  final count = await provider.importToSystemCalendar();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('已写入系统日历 $count 条课程')),
+                    );
+                  }
+                },
+              ),
+              _buildSettingTile(
+                context,
+                title: '分享 ICS / 发送到 ICSx5',
+                trailing: const Icon(Icons.share, color: Colors.orange),
+                onTap: () async {
+                  await provider.shareCoursesIcs();
                 },
               ),
               _buildSettingTile(

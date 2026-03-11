@@ -57,6 +57,50 @@ class CourseService {
     return [];
   }
 
+  Future<List<Course>> fetchGraduateCourses(String year, String term) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cookies = prefs.getString('cookies') ?? '';
+
+      _dio.options.headers['Cookie'] = cookies;
+      _dio.options.headers['User-Agent'] =
+          'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+      _dio.options.headers['Referer'] =
+          'http://yjs.sjtu.edu.cn/gsapp/sys/wdkbapp/*default/index.do';
+      _dio.options.contentType = Headers.formUrlEncodedContentType;
+
+      final xnxqdm = _convertGradYearTerm(year, term);
+      final response = await _dio.post(
+        GRAD_COURSE_URL,
+        data: {'XNXQDM': xnxqdm, 'XH': ''},
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data;
+        final Map<String, dynamic> json = (data is String)
+            ? jsonDecode(data)
+            : data;
+        try {
+          final rows = json['datas']['xspkjgcx']['rows'] as List<dynamic>;
+          return _parseGraduateCourses(rows);
+        } catch (e) {
+          debugPrint('Grad course parse error: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching grad courses: $e');
+    }
+    return [];
+  }
+
+  String _convertGradYearTerm(String year, String term) {
+    if (term == '2') {
+      final next = int.tryParse(year) ?? 0;
+      return '${next + 1}02';
+    }
+    return '${year}09';
+  }
+
   Course _parseUndergraduateCourse(Map<String, dynamic> json) {
     final startStep = WeekUtils.getStartAndStep(json['jcs'] as String? ?? '');
 
@@ -105,4 +149,103 @@ class CourseService {
       isVirtual: (json['xkbz'] as String? ?? '').contains('虚拟'),
     );
   }
+
+  List<Course> _parseGraduateCourses(List<dynamic> rows) {
+    final Map<String, Course> map = {};
+    final Map<String, int> endMap = {};
+
+    for (final row in rows) {
+      if (row is! Map<String, dynamic>) continue;
+      final classId = row['BJMC']?.toString() ?? '';
+      if (classId.isEmpty) continue;
+
+      Course? course = map[classId];
+      if (course == null) {
+        final weekCode = row['ZCBH']?.toString() ?? '';
+        final parsedWeeks = _fromBinaryWeekCode(weekCode);
+
+        course = Course(
+          courseId: row['KCDM']?.toString() ?? '',
+          courseName: row['KCMC']?.toString() ?? '未知课程',
+          teacher: row['JSXM']?.toString() ?? '未知教师',
+          classRoom: row['JASMC']?.toString() ?? '未知地点',
+          startWeek: parsedWeeks.startWeek,
+          endWeek: parsedWeeks.endWeek,
+          dayOfWeek: int.tryParse(row['XQ']?.toString() ?? '1') ?? 1,
+          startNode: 99, // will be replaced below
+          step: 1,
+          isOddWeek: parsedWeeks.isOdd,
+          isEvenWeek: parsedWeeks.isEven,
+          weekCode: parsedWeeks.weekCode,
+          color: Course.COLORS[Random().nextInt(Course.COLORS.length)],
+          isVirtual: false,
+        );
+        map[classId] = course;
+      }
+
+      final classTime = int.tryParse(row['KSJCDM']?.toString() ?? '1') ?? 1;
+      course = map[classId];
+      if (course != null) {
+        final newStart = classTime < course.startNode
+            ? classTime
+            : course.startNode;
+        map[classId] = course.copyWith(startNode: newStart);
+        final prevEnd = endMap[classId] ?? classTime;
+        if (classTime > prevEnd) endMap[classId] = classTime;
+      }
+    }
+
+    final List<Course> result = [];
+    for (final entry in map.entries) {
+      final course = entry.value;
+      final end = (endMap[entry.key] ?? course.startNode);
+      result.add(course.copyWith(step: end - course.startNode + 1));
+    }
+
+    return result;
+  }
+
+  _WeekRange _fromBinaryWeekCode(String code) {
+    final cleaned = code.padRight(WeekUtils.MAX_WEEKS, '0');
+    int first = cleaned.indexOf('1');
+    int last = cleaned.lastIndexOf('1');
+    if (first == -1) {
+      return _WeekRange(1, 16, false, false, cleaned);
+    }
+    int start = first + 1;
+    int end = last + 1;
+    bool hasOdd = false;
+    bool hasEven = false;
+    for (int i = 0; i < cleaned.length; i++) {
+      if (cleaned[i] == '1') {
+        if ((i + 1).isOdd) {
+          hasOdd = true;
+        } else {
+          hasEven = true;
+        }
+      }
+    }
+    return _WeekRange(
+      start,
+      end,
+      hasOdd && !hasEven,
+      hasEven && !hasOdd,
+      cleaned,
+    );
+  }
+}
+
+class _WeekRange {
+  final int startWeek;
+  final int endWeek;
+  final bool isOdd;
+  final bool isEven;
+  final String weekCode;
+  _WeekRange(
+    this.startWeek,
+    this.endWeek,
+    this.isOdd,
+    this.isEven,
+    this.weekCode,
+  );
 }

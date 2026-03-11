@@ -42,11 +42,13 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
             return NavigationDecision.navigate;
           },
           onPageStarted: (String url) {
+            if (!mounted) return;
             setState(() {
               _isLoading = true;
             });
           },
           onPageFinished: (String url) async {
+            if (!mounted) return;
             setState(() {
               _isLoading = false;
             });
