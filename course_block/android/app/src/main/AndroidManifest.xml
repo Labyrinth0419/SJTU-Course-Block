@@ -50,6 +50,7 @@
 
         <receiver
             android:name="com.labyrinth.course_block.widget.TodayWidgetProvider"
+            android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

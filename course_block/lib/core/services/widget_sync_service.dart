@@ -11,7 +11,18 @@ class WidgetSyncService {
 
   static final WidgetSyncService instance = WidgetSyncService._();
 
-  /// Push today’s courses to the Android home widget.
+  static const List<String> _weekdays = [
+    '', // index 0 unused
+    '周一',
+    '周二',
+    '周三',
+    '周四',
+    '周五',
+    '周六',
+    '周日',
+  ];
+
+  /// Push today's courses to the Android home widget.
   Future<void> updateTodayWidget(
     List<Course> courses,
     Schedule? schedule, {
@@ -26,6 +37,8 @@ class WidgetSyncService {
     if (currentWeek < 1) currentWeek = 1;
     if (currentWeek > totalWeeks) currentWeek = totalWeeks;
 
+    final weekdayName = _weekdays[today.weekday]; // weekday is 1–7
+
     final todayCourses =
         courses
             .where((c) => _isCourseInWeek(c, currentWeek))
@@ -34,26 +47,42 @@ class WidgetSyncService {
           ..sort((a, b) => a.startNode.compareTo(b.startNode));
 
     final payload = todayCourses
-        .take(5)
+        .take(3)
         .map(
           (c) => {
             'name': c.courseName,
             'room': c.classRoom,
-            'startNode': c.startNode,
-            'step': c.step,
+            'timeRange': _formatTimeRange(c.startNode, c.step),
           },
         )
         .toList();
 
-    final subtitle = '第$currentWeek周 ${today.month}/${today.day}';
+    final subtitle = '第$currentWeek周 $weekdayName  ${today.month}/${today.day}';
 
     await HomeWidget.saveWidgetData('today_header', schedule.name);
     await HomeWidget.saveWidgetData('today_subtitle', subtitle);
     await HomeWidget.saveWidgetData('today_list', jsonEncode(payload));
 
-    // Trigger only the today widget for now; more can be added later.
-    // Pass class path without leading dot; plugin prefixes package automatically.
     await HomeWidget.updateWidget(androidName: 'widget.TodayWidgetProvider');
+  }
+
+  /// 将节次号和步长转换为 "HH:mm-HH:mm" 格式字符串，例如 "08:00-09:40"。
+  String _formatTimeRange(int startNode, int step) {
+    if (startNode < 1) return '';
+    final startIdx = (startNode - 1).clamp(0, kClassStartTimes.length - 1);
+    final endIdx = (startNode + step - 2).clamp(0, kClassEndTimes.length - 1);
+    final startTime = _pad(kClassStartTimes[startIdx]);
+    final endTime = _pad(kClassEndTimes[endIdx]);
+    return '$startTime-$endTime';
+  }
+
+  /// 补零，将 "8:00" → "08:00"。
+  String _pad(String hhmm) {
+    final parts = hhmm.split(':');
+    if (parts.length != 2) return hhmm;
+    final h = parts[0].padLeft(2, '0');
+    final m = parts[1].padLeft(2, '0');
+    return '$h:$m';
   }
 
   bool _isCourseInWeek(Course course, int currentWeek) {

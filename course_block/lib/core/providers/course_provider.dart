@@ -324,7 +324,7 @@ class CourseProvider extends ChangeNotifier {
         }
 
         for (var course in uniqueCourses.values) {
-          /* 
+          /*
              We need to add `scheduleId` to the fetched course.
              Since `Course` is immutable, we can assume `Course.fromMap` was used in `_courseService`.
              We can just use `copy` mechanism if available, or just use naming arguments.
@@ -362,6 +362,7 @@ class CourseProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+      _updateWidgetsSafe();
     }
   }
 
