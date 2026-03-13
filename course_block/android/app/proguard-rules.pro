@@ -12,3 +12,9 @@
 # Keep home widget provider and plugin classes so R8 does not strip them.
 -keep class com.labyrinth.course_block.widget.TodayWidgetProvider { *; }
 -keep class es.antonborri.home_widget.** { *; }
+
+# device_calendar relies on Gson/reflection for some Android-side models.
+# Without keeping these classes, R8 can obfuscate fields/methods and break
+# release-only flows like retrieveCalendars(), which this app uses before
+# writing events into the system calendar.
+-keep class com.builttoroam.devicecalendar.** { *; }
