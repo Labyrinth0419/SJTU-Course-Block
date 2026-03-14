@@ -13,6 +13,8 @@ enum AppThemeScheme {
 enum AppCourseColorPalette { mildlinerNotes, candyBox, jellySoda, tokyoNeon }
 
 const String _courseColorTokenPrefix = 'palette:';
+const String _courseColorAutoTokenPrefix = 'auto:';
+const String _courseColorPoolTokenPrefix = 'pool:';
 const List<String> kLegacyCourseColorHexes = [
   '#FF758F',
   '#9B9BFF',
@@ -190,6 +192,16 @@ extension AppCourseColorPaletteX on AppCourseColorPalette {
         const Color(0xFF9A85D6),
         const Color(0xFFD578A0),
         const Color(0xFFB6885E),
+        const Color(0xFFE3A06A),
+        const Color(0xFFD5B85A),
+        const Color(0xFFA8B85A),
+        const Color(0xFF69B88F),
+        const Color(0xFF78B8B8),
+        const Color(0xFF7DA8E0),
+        const Color(0xFFB08FE5),
+        const Color(0xFFDF8CB3),
+        const Color(0xFFC59A74),
+        const Color(0xFF8AB47C),
       ],
       AppCourseColorPalette.candyBox => <Color>[
         const Color(0xFFFF7B9C),
@@ -200,6 +212,16 @@ extension AppCourseColorPaletteX on AppCourseColorPalette {
         const Color(0xFFFF8A65),
         const Color(0xFF44CFBF),
         const Color(0xFFF06CC6),
+        const Color(0xFFFFD95A),
+        const Color(0xFF9ADB5B),
+        const Color(0xFF7BE495),
+        const Color(0xFF67DDE6),
+        const Color(0xFF7CA9FF),
+        const Color(0xFFB88CFF),
+        const Color(0xFFFF9DC2),
+        const Color(0xFFFFAE7A),
+        const Color(0xFF57E0A6),
+        const Color(0xFFFF6FB5),
       ],
       AppCourseColorPalette.jellySoda => <Color>[
         const Color(0xFFFF5D73),
@@ -210,6 +232,16 @@ extension AppCourseColorPaletteX on AppCourseColorPalette {
         const Color(0xFFFB5607),
         const Color(0xFF06D6A0),
         const Color(0xFF5E60CE),
+        const Color(0xFFFF006E),
+        const Color(0xFFFFBE0B),
+        const Color(0xFF38B000),
+        const Color(0xFF00BBF9),
+        const Color(0xFF6A4CFF),
+        const Color(0xFFFF7F51),
+        const Color(0xFF00F5D4),
+        const Color(0xFF4361EE),
+        const Color(0xFFF72585),
+        const Color(0xFF4CC9F0),
       ],
       AppCourseColorPalette.tokyoNeon => <Color>[
         const Color(0xFF4C6EF5),
@@ -220,29 +252,83 @@ extension AppCourseColorPaletteX on AppCourseColorPalette {
         const Color(0xFF3B5CCC),
         const Color(0xFF1F8EA3),
         const Color(0xFFF4B86A),
+        const Color(0xFF82AAFF),
+        const Color(0xFF6BE6FF),
+        const Color(0xFF6CF2C2),
+        const Color(0xFFB08CFF),
+        const Color(0xFF2C7BE5),
+        const Color(0xFF00BFA6),
+        const Color(0xFFF7C66F),
+        const Color(0xFFFF9E64),
+        const Color(0xFF4DD2FF),
+        const Color(0xFFC099FF),
       ],
     };
 
+    List<Color> balance(Iterable<Color> colors) => [
+      for (final color in colors)
+        _balanceCourseColorDynamics(color, brightness: brightness),
+    ];
+
     if (brightness == Brightness.light) {
-      return base;
+      return balance(base);
     }
 
     final boost = this == AppCourseColorPalette.tokyoNeon ? 0.06 : 0.04;
-    return [for (final color in base) Color.lerp(color, Colors.white, boost)!];
+    return balance([
+      for (final color in base) Color.lerp(color, Colors.white, boost)!,
+    ]);
   }
 
   int get colorCount => colors(Brightness.light).length;
 
   List<Color> preview(Brightness brightness) =>
-      colors(brightness).take(4).toList();
+      colors(brightness).take(6).toList();
 
   String colorToken(int index) => buildCourseColorToken(index % colorCount);
 
-  String autoColorToken(String seed) =>
-      buildCourseColorToken(stableCourseColorIndex(seed, colorCount));
+  String autoColorToken(String seed) => buildAutoCourseColorToken(seed);
+}
+
+@immutable
+class ScheduledCourseColorSelection {
+  const ScheduledCourseColorSelection({required this.slot, this.variant = 0});
+
+  final int slot;
+  final int variant;
+}
+
+@immutable
+class CourseColorIdentityEntry {
+  const CourseColorIdentityEntry({required this.identity, this.colorValue});
+
+  final String identity;
+  final String? colorValue;
+}
+
+@immutable
+class _PoolColorCandidate {
+  const _PoolColorCandidate({
+    required this.selection,
+    required this.color,
+    required this.order,
+  });
+
+  final ScheduledCourseColorSelection selection;
+  final Color color;
+  final int order;
 }
 
 String buildCourseColorToken(int index) => '$_courseColorTokenPrefix$index';
+
+String buildAutoCourseColorToken(String seed) {
+  final hash = stableCourseColorHash(seed);
+  return '$_courseColorAutoTokenPrefix${hash.toRadixString(16).padLeft(8, '0')}';
+}
+
+String buildScheduledCourseColorToken({required int slot, int variant = 0}) {
+  return '$_courseColorPoolTokenPrefix$slot:$variant';
+}
 
 int? parseCourseColorToken(String? value) {
   if (value == null || !value.startsWith(_courseColorTokenPrefix)) {
@@ -251,12 +337,60 @@ int? parseCourseColorToken(String? value) {
   return int.tryParse(value.substring(_courseColorTokenPrefix.length));
 }
 
-int stableCourseColorIndex(String seed, int length) {
-  var hash = 0;
-  for (final codeUnit in seed.codeUnits) {
-    hash = ((hash * 31) + codeUnit) & 0x7fffffff;
+int? parseAutoCourseColorToken(String? value) {
+  if (value == null || !value.startsWith(_courseColorAutoTokenPrefix)) {
+    return null;
   }
-  return length == 0 ? 0 : hash % length;
+  return int.tryParse(
+    value.substring(_courseColorAutoTokenPrefix.length),
+    radix: 16,
+  );
+}
+
+ScheduledCourseColorSelection? parseScheduledCourseColorToken(String? value) {
+  if (value == null || !value.startsWith(_courseColorPoolTokenPrefix)) {
+    return null;
+  }
+
+  final parts = value.substring(_courseColorPoolTokenPrefix.length).split(':');
+  if (parts.isEmpty || parts.length > 2) {
+    return null;
+  }
+
+  final slot = int.tryParse(parts[0]);
+  final variant = parts.length == 2 ? int.tryParse(parts[1]) : 0;
+  if (slot == null || variant == null) {
+    return null;
+  }
+
+  return ScheduledCourseColorSelection(
+    slot: slot,
+    variant: variant < 0 ? 0 : variant,
+  );
+}
+
+bool isAutoCourseColorValue(String? value) {
+  if (value == null || value.isEmpty) {
+    return true;
+  }
+  return parseAutoCourseColorToken(value) != null ||
+      parseScheduledCourseColorToken(value) != null;
+}
+
+int stableCourseColorHash(String seed) {
+  var hash = 0x811C9DC5;
+  for (final codeUnit in seed.codeUnits) {
+    hash ^= codeUnit;
+    hash = (hash * 0x01000193) & 0xFFFFFFFF;
+  }
+  return hash & 0x7FFFFFFF;
+}
+
+int stableCourseColorIndex(String seed, int length) {
+  if (length <= 0) {
+    return 0;
+  }
+  return stableCourseColorHash(seed) % length;
 }
 
 String buildCourseColorSeed(String courseName, String teacher) {
@@ -264,21 +398,479 @@ String buildCourseColorSeed(String courseName, String teacher) {
   return '${normalize(courseName)}|${normalize(teacher)}';
 }
 
-int? resolveCourseColorSelectionIndex(String? value, int colorCount) {
+ScheduledCourseColorSelection? resolveStoredCourseColorSelection(
+  String? value,
+  int colorCount,
+) {
   if (colorCount <= 0) return null;
+
+  final scheduled = parseScheduledCourseColorToken(value);
+  if (scheduled != null) {
+    return ScheduledCourseColorSelection(
+      slot: scheduled.slot % colorCount,
+      variant: scheduled.variant,
+    );
+  }
+
   final tokenIndex = parseCourseColorToken(value);
   if (tokenIndex != null) {
-    return tokenIndex % colorCount;
+    return ScheduledCourseColorSelection(
+      slot: tokenIndex % colorCount,
+      variant: 0,
+    );
   }
+
   if (value != null) {
     final legacyIndex = kLegacyCourseColorHexes.indexWhere(
       (item) => item.toUpperCase() == value.toUpperCase(),
     );
     if (legacyIndex >= 0) {
-      return legacyIndex % colorCount;
+      return ScheduledCourseColorSelection(
+        slot: legacyIndex % colorCount,
+        variant: 0,
+      );
+    }
+  }
+
+  return null;
+}
+
+int? resolveCourseColorSelectionIndex(String? value, int colorCount) {
+  final selection = resolveStoredCourseColorSelection(value, colorCount);
+  if (selection == null || selection.variant != 0) {
+    return null;
+  }
+  return selection.slot;
+}
+
+String? _resolveLockedIdentityColor(List<String?> values) {
+  for (final value in values) {
+    if (value != null && value.isNotEmpty && !isAutoCourseColorValue(value)) {
+      return value;
     }
   }
   return null;
+}
+
+Map<String, String> assignScheduledCourseColorTokens(
+  Iterable<CourseColorIdentityEntry> entries, {
+  required List<Color> swatches,
+}) {
+  final colorCount = swatches.length;
+  if (colorCount <= 0) {
+    return const {};
+  }
+
+  final grouped = <String, List<String?>>{};
+  for (final entry in entries) {
+    grouped
+        .putIfAbsent(entry.identity, () => <String?>[])
+        .add(entry.colorValue);
+  }
+
+  final assignments = <String, String>{};
+  final occupiedKeys = <int>{};
+
+  for (final group in grouped.entries) {
+    final lockedColor = _resolveLockedIdentityColor(group.value);
+    if (lockedColor == null) {
+      continue;
+    }
+
+    assignments[group.key] = lockedColor;
+    final selection = resolveStoredCourseColorSelection(
+      lockedColor,
+      colorCount,
+    );
+    if (selection != null) {
+      occupiedKeys.add(selection.variant * colorCount + selection.slot);
+    }
+  }
+
+  final autoIdentities =
+      grouped.keys
+          .where((identity) => !assignments.containsKey(identity))
+          .toList()
+        ..sort((left, right) {
+          final leftHash = stableCourseColorHash(left);
+          final rightHash = stableCourseColorHash(right);
+          if (leftHash != rightHash) {
+            return leftHash.compareTo(rightHash);
+          }
+          return left.compareTo(right);
+        });
+
+  final lockedColors = <Color>[];
+  final fixedColorKeys = <String>{};
+  for (final value in assignments.values) {
+    final selection = resolveStoredCourseColorSelection(value, colorCount);
+    if (selection != null) {
+      lockedColors.add(
+        _deriveOverflowPoolColor(
+          swatches: swatches,
+          slot: selection.slot,
+          variant: selection.variant,
+          brightness: Brightness.light,
+        ),
+      );
+      continue;
+    }
+
+    if (value.startsWith('#')) {
+      try {
+        final color = Color(int.parse(value.replaceFirst('#', '0xFF')));
+        final key = color.toARGB32().toRadixString(16);
+        if (fixedColorKeys.add(key)) {
+          lockedColors.add(color);
+        }
+      } catch (_) {
+        // Ignore invalid fixed colors.
+      }
+    }
+  }
+
+  final availableBaseCount = List<int>.generate(
+    colorCount,
+    (index) => index,
+  ).where((slot) => !occupiedKeys.contains(slot)).length;
+  final candidates = _buildPoolColorCandidates(
+    swatches: swatches,
+    occupiedKeys: occupiedKeys,
+    requiredCount: autoIdentities.length <= availableBaseCount
+        ? colorCount
+        : autoIdentities.length + colorCount,
+    maxVariant: autoIdentities.length <= availableBaseCount ? 0 : null,
+  );
+  final selectedCandidates = _selectHighContrastCandidates(
+    candidates: candidates,
+    lockedColors: lockedColors,
+    count: autoIdentities.length,
+  )..sort((left, right) => left.order.compareTo(right.order));
+
+  for (var index = 0; index < autoIdentities.length; index++) {
+    final identity = autoIdentities[index];
+    final candidate = selectedCandidates[index];
+    assignments[identity] = buildScheduledCourseColorToken(
+      slot: candidate.selection.slot,
+      variant: candidate.selection.variant,
+    );
+  }
+
+  return assignments;
+}
+
+int _channel(int argb, int shift) => (argb >> shift) & 0xFF;
+
+double _circularHueDistance(double left, double right) {
+  final diff = (left - right).abs();
+  return diff <= 180.0 ? diff : 360.0 - diff;
+}
+
+double _approxCourseColorDistance(Color left, Color right) {
+  final leftArgb = left.toARGB32();
+  final rightArgb = right.toARGB32();
+  final dr = (_channel(leftArgb, 16) - _channel(rightArgb, 16)).abs() / 255.0;
+  final dg = (_channel(leftArgb, 8) - _channel(rightArgb, 8)).abs() / 255.0;
+  final db = (_channel(leftArgb, 0) - _channel(rightArgb, 0)).abs() / 255.0;
+
+  final leftHsv = HSVColor.fromColor(left);
+  final rightHsv = HSVColor.fromColor(right);
+  final hue = _circularHueDistance(leftHsv.hue, rightHsv.hue) / 180.0;
+  final saturation = (leftHsv.saturation - rightHsv.saturation).abs();
+  final value = (leftHsv.value - rightHsv.value).abs();
+
+  return hue * 2.8 +
+      saturation * 0.9 +
+      value * 0.6 +
+      dr * 0.7 +
+      dg * 1.1 +
+      db * 0.8;
+}
+
+double _averageDistance(Color color, Iterable<Color> others) {
+  var total = 0.0;
+  var count = 0;
+  for (final other in others) {
+    total += _approxCourseColorDistance(color, other);
+    count++;
+  }
+  if (count == 0) {
+    return 0.0;
+  }
+  return total / count;
+}
+
+double _minDistance(Color color, Iterable<Color> others) {
+  var best = double.infinity;
+  for (final other in others) {
+    final distance = _approxCourseColorDistance(color, other);
+    if (distance < best) {
+      best = distance;
+    }
+  }
+  return best;
+}
+
+List<_PoolColorCandidate> _buildPoolColorCandidates({
+  required List<Color> swatches,
+  required Set<int> occupiedKeys,
+  required int requiredCount,
+  int? maxVariant,
+}) {
+  final candidates = <_PoolColorCandidate>[];
+  if (swatches.isEmpty) {
+    return candidates;
+  }
+
+  var variant = 0;
+  while (candidates.length < requiredCount) {
+    if (maxVariant != null && variant > maxVariant) {
+      break;
+    }
+    for (var slot = 0; slot < swatches.length; slot++) {
+      final key = variant * swatches.length + slot;
+      if (occupiedKeys.contains(key)) {
+        continue;
+      }
+      candidates.add(
+        _PoolColorCandidate(
+          selection: ScheduledCourseColorSelection(
+            slot: slot,
+            variant: variant,
+          ),
+          color: _deriveOverflowPoolColor(
+            swatches: swatches,
+            slot: slot,
+            variant: variant,
+            brightness: Brightness.light,
+          ),
+          order: key,
+        ),
+      );
+    }
+    variant++;
+  }
+
+  return candidates;
+}
+
+List<_PoolColorCandidate> _selectHighContrastCandidates({
+  required List<_PoolColorCandidate> candidates,
+  required List<Color> lockedColors,
+  required int count,
+}) {
+  if (count <= 0 || candidates.isEmpty) {
+    return const [];
+  }
+
+  final remaining = [...candidates];
+  final selected = <_PoolColorCandidate>[];
+  final selectedColors = [...lockedColors];
+
+  void selectCandidate(_PoolColorCandidate candidate) {
+    selected.add(candidate);
+    selectedColors.add(candidate.color);
+    remaining.removeWhere(
+      (item) =>
+          item.selection.slot == candidate.selection.slot &&
+          item.selection.variant == candidate.selection.variant,
+    );
+  }
+
+  if (selectedColors.isEmpty && count >= 2 && remaining.length >= 2) {
+    _PoolColorCandidate? bestLeft;
+    _PoolColorCandidate? bestRight;
+    var bestDistance = -1.0;
+
+    for (var leftIndex = 0; leftIndex < remaining.length - 1; leftIndex++) {
+      for (
+        var rightIndex = leftIndex + 1;
+        rightIndex < remaining.length;
+        rightIndex++
+      ) {
+        final distance = _approxCourseColorDistance(
+          remaining[leftIndex].color,
+          remaining[rightIndex].color,
+        );
+        if (distance > bestDistance) {
+          bestDistance = distance;
+          bestLeft = remaining[leftIndex];
+          bestRight = remaining[rightIndex];
+        }
+      }
+    }
+
+    if (bestLeft != null) {
+      selectCandidate(bestLeft);
+    }
+    if (bestRight != null && selected.length < count) {
+      selectCandidate(bestRight);
+    }
+  }
+
+  while (selected.length < count && remaining.isNotEmpty) {
+    _PoolColorCandidate? bestCandidate;
+    var bestScore = -1.0;
+    var bestSpread = -1.0;
+
+    for (final candidate in remaining) {
+      final score = selectedColors.isEmpty
+          ? _averageDistance(
+              candidate.color,
+              remaining
+                  .where((other) => other.order != candidate.order)
+                  .map((other) => other.color),
+            )
+          : _minDistance(candidate.color, selectedColors);
+      final spread = _averageDistance(candidate.color, selectedColors);
+      if (score > bestScore ||
+          (score == bestScore && spread > bestSpread) ||
+          (score == bestScore &&
+              spread == bestSpread &&
+              (bestCandidate == null ||
+                  candidate.order < bestCandidate.order))) {
+        bestCandidate = candidate;
+        bestScore = score;
+        bestSpread = spread;
+      }
+    }
+
+    if (bestCandidate == null) {
+      break;
+    }
+
+    selectCandidate(bestCandidate);
+  }
+
+  return selected;
+}
+
+Color _balanceCourseColorDynamics(
+  Color color, {
+  required Brightness brightness,
+}) {
+  final hsv = HSVColor.fromColor(color);
+  final saturationCenter = brightness == Brightness.dark ? 0.70 : 0.68;
+  final saturationScale = brightness == Brightness.dark ? 0.66 : 0.60;
+  final valueCenter = brightness == Brightness.dark ? 0.80 : 0.76;
+  final valueScale = brightness == Brightness.dark ? 0.42 : 0.36;
+
+  final balancedSaturation =
+      (saturationCenter + (hsv.saturation - saturationCenter) * saturationScale)
+          .clamp(
+            brightness == Brightness.dark ? 0.52 : 0.50,
+            brightness == Brightness.dark ? 0.82 : 0.78,
+          )
+          .toDouble();
+  final balancedValue = (valueCenter + (hsv.value - valueCenter) * valueScale)
+      .clamp(
+        brightness == Brightness.dark ? 0.74 : 0.68,
+        brightness == Brightness.dark ? 0.88 : 0.82,
+      )
+      .toDouble();
+
+  return hsv
+      .withSaturation(balancedSaturation)
+      .withValue(balancedValue)
+      .toColor();
+}
+
+Color _generateLegacyCoursePaletteColor({
+  required List<Color> swatches,
+  required int hash,
+  required Brightness brightness,
+}) {
+  if (swatches.isEmpty) {
+    return brightness == Brightness.dark
+        ? const Color(0xFF82AAFF)
+        : const Color(0xFF4C82C3);
+  }
+  if (swatches.length == 1) {
+    return swatches.first;
+  }
+
+  final primaryIndex = hash % swatches.length;
+  final secondaryDistance = 1 + ((hash >> 3) % (swatches.length - 1));
+  final secondaryIndex = (primaryIndex + secondaryDistance) % swatches.length;
+  final mix = 0.18 + (((hash >> 8) & 0xFF) / 255.0) * 0.64;
+  final blended = Color.lerp(
+    swatches[primaryIndex],
+    swatches[secondaryIndex],
+    mix,
+  )!;
+
+  final hsv = HSVColor.fromColor(blended);
+  final hueShift = ((((hash >> 16) & 0xFF) / 255.0) - 0.5) * 24.0;
+  final saturationShift = ((((hash >> 24) & 0x0F) / 15.0) - 0.5) * 0.20;
+  final valueShift =
+      ((((hash >> 28) & 0x07) / 7.0) - 0.5) *
+      (brightness == Brightness.dark ? 0.14 : 0.12);
+
+  final adjusted = hsv
+      .withHue((hsv.hue + hueShift + 360.0) % 360.0)
+      .withSaturation(
+        (hsv.saturation + saturationShift)
+            .clamp(
+              brightness == Brightness.dark ? 0.48 : 0.44,
+              brightness == Brightness.dark ? 0.88 : 0.84,
+            )
+            .toDouble(),
+      )
+      .withValue(
+        (hsv.value + valueShift)
+            .clamp(
+              brightness == Brightness.dark ? 0.72 : 0.68,
+              brightness == Brightness.dark ? 0.96 : 0.94,
+            )
+            .toDouble(),
+      )
+      .toColor();
+  return _balanceCourseColorDynamics(adjusted, brightness: brightness);
+}
+
+Color _deriveOverflowPoolColor({
+  required List<Color> swatches,
+  required int slot,
+  required int variant,
+  required Brightness brightness,
+}) {
+  final base = swatches[slot % swatches.length];
+  if (variant <= 0 || swatches.length == 1) {
+    return base;
+  }
+
+  final neighbor = swatches[(slot + variant) % swatches.length];
+  final mix = (0.18 + ((variant - 1) % 4) * 0.12).clamp(0.18, 0.54);
+  final blended = Color.lerp(base, neighbor, mix)!;
+  final hsv = HSVColor.fromColor(blended);
+  final cycle = (variant - 1) % 4;
+  final band = (variant - 1) ~/ 4;
+  final hueBase = [10.0, -12.0, 18.0, -20.0][cycle];
+  final saturationBase = [0.06, -0.05, 0.04, -0.07][cycle];
+  final valueBase = brightness == Brightness.dark
+      ? [0.08, -0.04, 0.12, -0.08][cycle]
+      : [0.06, -0.05, 0.10, -0.09][cycle];
+
+  final adjusted = hsv
+      .withHue((hsv.hue + hueBase + band * 6.0 + 360.0) % 360.0)
+      .withSaturation(
+        (hsv.saturation + saturationBase - band * 0.01)
+            .clamp(
+              brightness == Brightness.dark ? 0.46 : 0.42,
+              brightness == Brightness.dark ? 0.90 : 0.86,
+            )
+            .toDouble(),
+      )
+      .withValue(
+        (hsv.value + valueBase - band * 0.015)
+            .clamp(
+              brightness == Brightness.dark ? 0.70 : 0.66,
+              brightness == Brightness.dark ? 0.97 : 0.95,
+            )
+            .toDouble(),
+      )
+      .toColor();
+  return _balanceCourseColorDynamics(adjusted, brightness: brightness);
 }
 
 Color resolveCourseCardColor({
@@ -288,12 +880,17 @@ Color resolveCourseCardColor({
   required String seed,
 }) {
   final swatches = palette.colors(brightness);
-  final selectionIndex = resolveCourseColorSelectionIndex(
+  final selection = resolveStoredCourseColorSelection(
     colorValue,
     swatches.length,
   );
-  if (selectionIndex != null) {
-    return swatches[selectionIndex];
+  if (selection != null) {
+    return _deriveOverflowPoolColor(
+      swatches: swatches,
+      slot: selection.slot,
+      variant: selection.variant,
+      brightness: brightness,
+    );
   }
   if (colorValue != null && colorValue.startsWith('#')) {
     try {
@@ -302,7 +899,13 @@ Color resolveCourseCardColor({
       // Fall through to the deterministic palette color.
     }
   }
-  return swatches[stableCourseColorIndex(seed, swatches.length)];
+  final autoHash =
+      parseAutoCourseColorToken(colorValue) ?? stableCourseColorHash(seed);
+  return _generateLegacyCoursePaletteColor(
+    swatches: swatches,
+    hash: autoHash,
+    brightness: brightness,
+  );
 }
 
 class AppThemeTone {

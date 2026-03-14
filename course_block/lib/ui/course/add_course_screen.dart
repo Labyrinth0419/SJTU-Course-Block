@@ -49,8 +49,9 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
     _startWeek = widget.course?.startWeek ?? 1;
     _endWeek = widget.course?.endWeek ?? 16;
     _isVirtual = widget.course?.isVirtual ?? false;
-    _color = widget.course?.color ?? buildCourseColorToken(0);
-    _colorManuallySelected = widget.course?.color.isNotEmpty ?? false;
+    final initialColor = widget.course?.color ?? '';
+    _color = initialColor;
+    _colorManuallySelected = !isAutoCourseColorValue(initialColor);
     _nameController.addListener(_handleAutoColorChanged);
     _teacherController.addListener(_handleAutoColorChanged);
   }
@@ -68,24 +69,38 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
     setState(() {});
   }
 
-  String _resolvedColorValue(AppCourseColorPalette palette) {
-    if (_colorManuallySelected) {
+  String _resolvedColorValue(CourseProvider provider) {
+    if (_colorManuallySelected && _color.isNotEmpty) {
       return _color;
     }
-    return palette.autoColorToken(
-      buildCourseColorSeed(_nameController.text, _teacherController.text),
+
+    final identity = buildCourseColorSeed(
+      _nameController.text,
+      _teacherController.text,
     );
+    final editingCourseId = widget.course?.id;
+    final assignments = assignScheduledCourseColorTokens([
+      for (final course in provider.courses)
+        if (course.id != editingCourseId)
+          CourseColorIdentityEntry(
+            identity: buildCourseColorSeed(course.courseName, course.teacher),
+            colorValue: course.color,
+          ),
+      CourseColorIdentityEntry(identity: identity, colorValue: ''),
+    ], swatches: provider.courseColorPalette.colors(Brightness.light));
+
+    return assignments[identity] ??
+        provider.courseColorPalette.autoColorToken(identity);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = context.appTheme;
-    final courseColorPalette = context
-        .watch<CourseProvider>()
-        .courseColorPalette;
+    final provider = context.watch<CourseProvider>();
+    final courseColorPalette = provider.courseColorPalette;
     final courseColors = courseColorPalette.colors(theme.brightness);
-    final resolvedColorValue = _resolvedColorValue(courseColorPalette);
+    final resolvedColorValue = _resolvedColorValue(provider);
     final title = _isEditMode ? '编辑课程' : '添加课程';
     final buttonLabel = _isEditMode ? '保存修改' : '添加课程';
 
@@ -394,7 +409,7 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
 
     final provider = context.read<CourseProvider>();
     final scheduleId = provider.currentSchedule?.id;
-    final colorValue = _resolvedColorValue(provider.courseColorPalette);
+    final colorValue = _resolvedColorValue(provider);
     final course = Course(
       id: widget.course?.id,
       scheduleId: scheduleId,

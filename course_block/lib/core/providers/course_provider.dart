@@ -545,6 +545,7 @@ class CourseProvider extends ChangeNotifier {
         _courses = await DatabaseHelper.instance.getCoursesBySchedule(
           _currentSchedule!.id!,
         );
+        await _normalizeCurrentScheduleCourseColors();
       } else {
         _courses = [];
       }
@@ -570,6 +571,50 @@ class CourseProvider extends ChangeNotifier {
       return;
     }
     _schedules = [..._schedules, schedule];
+  }
+
+  Future<void> _normalizeCurrentScheduleCourseColors() async {
+    if (_courses.isEmpty) {
+      return;
+    }
+
+    final assignments = assignScheduledCourseColorTokens(
+      _courses.map(
+        (course) => CourseColorIdentityEntry(
+          identity: buildCourseColorSeed(course.courseName, course.teacher),
+          colorValue: course.color,
+        ),
+      ),
+      swatches: _courseColorPalette.colors(Brightness.light),
+    );
+
+    if (assignments.isEmpty) {
+      return;
+    }
+
+    final updatedCourses = <Course>[];
+    var hasChanges = false;
+
+    for (final course in _courses) {
+      final identity = buildCourseColorSeed(course.courseName, course.teacher);
+      final assignedColor = assignments[identity] ?? course.color;
+      final updatedCourse = assignedColor == course.color
+          ? course
+          : course.copyWith(color: assignedColor);
+
+      if (updatedCourse.color != course.color) {
+        hasChanges = true;
+        if (updatedCourse.id != null) {
+          await DatabaseHelper.instance.updateCourse(updatedCourse);
+        }
+      }
+
+      updatedCourses.add(updatedCourse);
+    }
+
+    if (hasChanges) {
+      _courses = updatedCourses;
+    }
   }
 
   Future<int> syncCurrentSchedule() async {
@@ -681,6 +726,7 @@ class CourseProvider extends ChangeNotifier {
         _courses = await DatabaseHelper.instance.getCoursesBySchedule(
           targetSchedule.id!,
         );
+        await _normalizeCurrentScheduleCourseColors();
       }
       final count = fetchedCourses.length;
       return count;
