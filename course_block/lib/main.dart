@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/providers/course_provider.dart';
+import 'core/theme/app_theme.dart';
 import 'ui/home/home_screen.dart';
 import 'ui/settings/settings_screen.dart';
 
@@ -30,19 +31,8 @@ class CourseBlockApp extends StatelessWidget {
         return MaterialApp(
           navigatorObservers: [routeObserver],
           title: '课程表',
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.red),
-            useMaterial3: true,
-            brightness: Brightness.light,
-          ),
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.red,
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-            brightness: Brightness.dark,
-          ),
+          theme: buildAppTheme(provider.themeScheme, Brightness.light),
+          darkTheme: buildAppTheme(provider.themeScheme, Brightness.dark),
           themeMode: provider.themeMode,
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,

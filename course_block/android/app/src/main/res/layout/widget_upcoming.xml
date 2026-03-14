@@ -1,6 +1,8 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!-- 近日课程：双栏布局（今天 | 明天），课程卡片通过 addView() 动态填充 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_today_bg"
@@ -8,14 +10,16 @@
     android:paddingLeft="10dp"
     android:paddingRight="10dp"
     android:paddingTop="6dp"
-    android:paddingBottom="8dp">
+    android:paddingBottom="8dp"
+>
 
     <!-- 头部：课表名（左）+ 日期周次（右） -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+    >
 
         <TextView
             android:id="@+id/tv_header"
@@ -27,7 +31,8 @@
             android:text="近日课程"
             android:textColor="@color/widget_header_text"
             android:textSize="12sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+        />
 
         <TextView
             android:id="@+id/tv_subtitle"
@@ -35,24 +40,28 @@
             android:layout_height="wrap_content"
             android:text="近3天"
             android:textColor="@color/widget_subtitle_text"
-            android:textSize="10sp" />
+            android:textSize="10sp"
+        />
 
     </LinearLayout>
 
     <!-- 横向分割线 -->
     <TextView
+        android:id="@+id/divider_top"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="4dp"
         android:layout_marginBottom="3dp"
-        android:background="@color/widget_divider" />
+        android:background="@color/widget_divider"
+    />
 
     <!-- 双栏主体 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+    >
 
         <!-- 今天栏 -->
         <LinearLayout
@@ -61,7 +70,8 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingEnd="4dp">
+            android:paddingEnd="4dp"
+        >
 
             <TextView
                 android:id="@+id/lbl_today"
@@ -71,15 +81,18 @@
                 android:textColor="@color/widget_header_text"
                 android:textSize="10sp"
                 android:textStyle="bold"
-                android:paddingBottom="2dp" />
+                android:paddingBottom="2dp"
+            />
 
         </LinearLayout>
 
         <!-- 纵向分割线 -->
         <TextView
+            android:id="@+id/divider_center"
             android:layout_width="1dp"
             android:layout_height="match_parent"
-            android:background="@color/widget_divider" />
+            android:background="@color/widget_divider"
+        />
 
         <!-- 明天栏 -->
         <LinearLayout
@@ -88,7 +101,8 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingStart="4dp">
+            android:paddingStart="4dp"
+        >
 
             <TextView
                 android:id="@+id/lbl_tmr"
@@ -97,7 +111,8 @@
                 android:text="明天"
                 android:textColor="@color/widget_subtitle_text"
                 android:textSize="10sp"
-                android:paddingBottom="2dp" />
+                android:paddingBottom="2dp"
+            />
 
         </LinearLayout>
 
@@ -105,17 +120,20 @@
 
     <!-- 底部分割线 -->
     <TextView
+        android:id="@+id/divider_bottom"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginBottom="4dp"
-        android:background="@color/widget_divider" />
+        android:background="@color/widget_divider"
+    />
 
     <!-- 底部操作行：刷新（左）+ 打开（右） -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+    >
 
         <TextView
             android:id="@+id/btn_refresh"
@@ -124,12 +142,14 @@
             android:text="↻"
             android:textColor="@color/widget_subtitle_text"
             android:textSize="14sp"
-            android:padding="2dp" />
+            android:padding="2dp"
+        />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="1dp"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+        />
 
         <TextView
             android:id="@+id/btn_open"
@@ -138,7 +158,8 @@
             android:text="打开 →"
             android:textColor="@color/widget_subtitle_text"
             android:textSize="10sp"
-            android:padding="2dp" />
+            android:padding="2dp"
+        />
 
     </LinearLayout>
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/providers/course_provider.dart';
+import '../../core/theme/app_theme.dart';
 import '../../main.dart';
 import '../course/add_course_screen.dart';
 import '../settings/more_functions_sheet.dart';
@@ -192,6 +193,7 @@ class _HomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette = context.appTheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
       child: Row(
@@ -225,8 +227,8 @@ class _HomeHeader extends StatelessWidget {
           _HeaderIconButton(
             tooltip: '添加课程',
             icon: Icons.add_rounded,
-            color: const Color(0xFFDDEFCF),
-            iconColor: const Color(0xFF447A1F),
+            color: palette.headerAddContainer,
+            iconColor: palette.headerAddForeground,
             onPressed: onAddCourse,
           ),
           const SizedBox(width: 6),
@@ -238,12 +240,14 @@ class _HomeHeader extends StatelessWidget {
             ),
             color: theme.colorScheme.surface,
             onSelected: onImportSelected,
-            itemBuilder: (context) => const [
+            itemBuilder: (context) => [
               PopupMenuItem(
                 value: ImportMenuAction.syncCurrent,
                 child: _PopupActionRow(
                   icon: Icons.school_rounded,
                   label: '从教务导入',
+                  iconColor: palette.headerImportForeground,
+                  containerColor: palette.headerImportContainer,
                 ),
               ),
               PopupMenuItem(
@@ -251,6 +255,8 @@ class _HomeHeader extends StatelessWidget {
                 child: _PopupActionRow(
                   icon: Icons.link_rounded,
                   label: '登录教务系统',
+                  iconColor: theme.colorScheme.secondary,
+                  containerColor: theme.colorScheme.secondaryContainer,
                 ),
               ),
               PopupMenuItem(
@@ -258,6 +264,8 @@ class _HomeHeader extends StatelessWidget {
                 child: _PopupActionRow(
                   icon: Icons.file_present_rounded,
                   label: '从 JSON 导入',
+                  iconColor: palette.headerAddForeground,
+                  containerColor: palette.headerAddContainer,
                 ),
               ),
               PopupMenuItem(
@@ -265,6 +273,8 @@ class _HomeHeader extends StatelessWidget {
                 child: _PopupActionRow(
                   icon: Icons.calendar_month_rounded,
                   label: '从 ICS 导入',
+                  iconColor: palette.headerExportForeground,
+                  containerColor: palette.headerExportContainer,
                 ),
               ),
               PopupMenuItem(
@@ -272,14 +282,16 @@ class _HomeHeader extends StatelessWidget {
                 child: _PopupActionRow(
                   icon: Icons.event_repeat_rounded,
                   label: '同步其他学期',
+                  iconColor: palette.headerMoreForeground,
+                  containerColor: palette.headerMoreContainer,
                 ),
               ),
             ],
-            child: const _HeaderIconButton(
+            child: _HeaderIconButton(
               tooltip: '导入 / 同步',
               icon: Icons.download_rounded,
-              color: Color(0xFFD7E8FF),
-              iconColor: Color(0xFF2E5EA8),
+              color: palette.headerImportContainer,
+              iconColor: palette.headerImportForeground,
             ),
           ),
           const SizedBox(width: 6),
@@ -291,12 +303,14 @@ class _HomeHeader extends StatelessWidget {
             ),
             color: theme.colorScheme.surface,
             onSelected: onExportSelected,
-            itemBuilder: (context) => const [
+            itemBuilder: (context) => [
               PopupMenuItem(
                 value: ExportMenuAction.exportJson,
                 child: _PopupActionRow(
                   icon: Icons.save_alt_rounded,
                   label: '导出为备份',
+                  iconColor: palette.headerExportForeground,
+                  containerColor: palette.headerExportContainer,
                 ),
               ),
               PopupMenuItem(
@@ -304,6 +318,8 @@ class _HomeHeader extends StatelessWidget {
                 child: _PopupActionRow(
                   icon: Icons.event_note_rounded,
                   label: '导出为日历文件',
+                  iconColor: theme.colorScheme.secondary,
+                  containerColor: theme.colorScheme.secondaryContainer,
                 ),
               ),
               PopupMenuItem(
@@ -311,6 +327,8 @@ class _HomeHeader extends StatelessWidget {
                 child: _PopupActionRow(
                   icon: Icons.share_rounded,
                   label: '分享课程文件',
+                  iconColor: theme.colorScheme.primary,
+                  containerColor: theme.colorScheme.primaryContainer,
                 ),
               ),
               PopupMenuItem(
@@ -318,22 +336,24 @@ class _HomeHeader extends StatelessWidget {
                 child: _PopupActionRow(
                   icon: Icons.event_available_rounded,
                   label: '写入系统日历',
+                  iconColor: palette.headerAddForeground,
+                  containerColor: palette.headerAddContainer,
                 ),
               ),
             ],
-            child: const _HeaderIconButton(
+            child: _HeaderIconButton(
               tooltip: '导出 / 分享',
               icon: Icons.ios_share_rounded,
-              color: Color(0xFFFFE8C9),
-              iconColor: Color(0xFFA86B17),
+              color: palette.headerExportContainer,
+              iconColor: palette.headerExportForeground,
             ),
           ),
           const SizedBox(width: 6),
           _HeaderIconButton(
             tooltip: '更多',
             icon: Icons.more_horiz_rounded,
-            color: const Color(0xFFE9E5F3),
-            iconColor: const Color(0xFF5E5870),
+            color: palette.headerMoreContainer,
+            iconColor: palette.headerMoreForeground,
             onPressed: onOpenMore,
           ),
         ],
@@ -379,15 +399,40 @@ class _HeaderIconButton extends StatelessWidget {
 }
 
 class _PopupActionRow extends StatelessWidget {
-  const _PopupActionRow({required this.icon, required this.label});
+  const _PopupActionRow({
+    required this.icon,
+    required this.label,
+    required this.iconColor,
+    required this.containerColor,
+  });
 
   final IconData icon;
   final String label;
+  final Color iconColor;
+  final Color containerColor;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Row(
-      children: [Icon(icon, size: 20), const SizedBox(width: 12), Text(label)],
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: containerColor,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, size: 18, color: iconColor),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

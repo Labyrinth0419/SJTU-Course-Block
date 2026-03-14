@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
-import '../../core/models/course.dart';
-import '../course/add_course_screen.dart';
 import 'package:provider/provider.dart';
-import '../../core/providers/course_provider.dart';
-import '../../core/db/database_helper.dart';
+
 import 'dart:io';
+
+import '../../core/db/database_helper.dart';
+import '../../core/models/course.dart';
+import '../../core/providers/course_provider.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/time_slots.dart';
+import '../course/add_course_screen.dart';
 
 class ScheduleGrid extends StatelessWidget {
   final List<Course> courses;
@@ -22,14 +25,16 @@ class ScheduleGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<CourseProvider>();
+    final theme = Theme.of(context);
+    final palette = context.appTheme;
     final showGridLines = provider.showGridLines;
     final showNonCurrentWeek = provider.showNonCurrentWeek;
-    final brightness = Theme.of(context).brightness;
+    final brightness = theme.brightness;
     final backgroundColor =
         (brightness == Brightness.dark
             ? provider.backgroundColorDark
             : provider.backgroundColorLight) ??
-        Theme.of(context).colorScheme.background;
+        theme.scaffoldBackgroundColor;
     final backgroundImagePath = provider.backgroundImagePath;
     final backgroundImageOpacity = provider.backgroundImageOpacity;
     final gridHeight = provider.gridHeight;
@@ -52,7 +57,9 @@ class ScheduleGrid extends StatelessWidget {
                   image: FileImage(File(backgroundImagePath)),
                   fit: BoxFit.cover,
                   colorFilter: ColorFilter.mode(
-                    Colors.white.withOpacity(backgroundImageOpacity),
+                    palette.backgroundImageOverlay.withValues(
+                      alpha: backgroundImageOpacity,
+                    ),
                     BlendMode.dstATop,
                   ),
                 ),
@@ -73,8 +80,10 @@ class ScheduleGrid extends StatelessWidget {
             final double totalHeight = headerHeight + (classCount * rowHeight);
 
             final List<Course> candidates = courses.where((course) {
-              if (!_isCourseInWeek(course, currentWeek) && !showNonCurrentWeek)
+              if (!_isCourseInWeek(course, currentWeek) &&
+                  !showNonCurrentWeek) {
                 return false;
+              }
               if (course.dayOfWeek > 5 && !showWeekend) return false;
               if (course.dayOfWeek == 6 && !provider.showSaturday) return false;
               if (course.dayOfWeek == 7 && !provider.showSunday) return false;
@@ -162,6 +171,7 @@ class ScheduleGrid extends StatelessWidget {
                         daysToShow: daysToShow,
                         showGridLines: showGridLines,
                         classCount: classCount,
+                        lineColor: palette.gridLineColor,
                       ),
                     ),
 
@@ -177,23 +187,24 @@ class ScheduleGrid extends StatelessWidget {
                             children: [
                               Text(
                                 '${i + 1}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
+                                  color: theme.colorScheme.onSurface,
                                 ),
                               ),
                               Text(
                                 kClassStartTimes[i],
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 8,
-                                  color: Colors.grey,
+                                  color: palette.gridMinorText,
                                 ),
                               ),
                               Text(
                                 kClassEndTimes[i],
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 8,
-                                  color: Colors.grey,
+                                  color: palette.gridMinorText,
                                 ),
                               ),
                             ],
@@ -213,8 +224,9 @@ class ScheduleGrid extends StatelessWidget {
                             children: [
                               Text(
                                 _getDayName(i),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.bold,
+                                  color: theme.colorScheme.onSurface,
                                 ),
                               ),
                               Builder(
@@ -242,22 +254,10 @@ class ScheduleGrid extends StatelessWidget {
                                         "${date.month}/${date.day}",
                                         style: TextStyle(
                                           fontSize: 10,
-                                          color:
-                                              (date.year ==
-                                                      DateTime.now().year &&
-                                                  date.month ==
-                                                      DateTime.now().month &&
-                                                  date.day ==
-                                                      DateTime.now().day)
-                                              ? Colors.blue
-                                              : Colors.grey,
-                                          fontWeight:
-                                              (date.year ==
-                                                      DateTime.now().year &&
-                                                  date.month ==
-                                                      DateTime.now().month &&
-                                                  date.day ==
-                                                      DateTime.now().day)
+                                          color: _isToday(date)
+                                              ? palette.gridTodayText
+                                              : palette.gridMinorText,
+                                          fontWeight: _isToday(date)
                                               ? FontWeight.bold
                                               : FontWeight.normal,
                                         ),
@@ -265,9 +265,9 @@ class ScheduleGrid extends StatelessWidget {
                                       if (status.isNotEmpty)
                                         Text(
                                           status,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 8,
-                                            color: Colors.red,
+                                            color: palette.gridOutOfTermText,
                                           ),
                                         ),
                                     ],
@@ -305,6 +305,9 @@ class ScheduleGrid extends StatelessWidget {
                               color: _getCourseColor(
                                 course,
                                 _isCourseInWeek(course, currentWeek),
+                                palette,
+                                provider.courseColorPalette,
+                                brightness,
                               ),
                               borderRadius: BorderRadius.circular(cornerRadius),
                             ),
@@ -315,16 +318,17 @@ class ScheduleGrid extends StatelessWidget {
                                 provider.outlineText
                                     ? _outlinedText(
                                         course.courseName,
-                                        baseStyle: const TextStyle(
+                                        baseStyle: TextStyle(
                                           color: Colors.white,
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
                                         ),
                                         maxLines: 4,
+                                        outlineColor: palette.courseOutline,
                                       )
                                     : Text(
                                         course.courseName,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
@@ -332,7 +336,7 @@ class ScheduleGrid extends StatelessWidget {
                                             Shadow(
                                               offset: Offset(0, 1),
                                               blurRadius: 2,
-                                              color: Colors.black26,
+                                              color: palette.courseTextShadow,
                                             ),
                                           ],
                                         ),
@@ -343,22 +347,23 @@ class ScheduleGrid extends StatelessWidget {
                                 provider.outlineText
                                     ? _outlinedText(
                                         '@${course.classRoom}',
-                                        baseStyle: const TextStyle(
+                                        baseStyle: TextStyle(
                                           color: Colors.white,
                                           fontSize: 9,
                                         ),
                                         maxLines: 3,
+                                        outlineColor: palette.courseOutline,
                                       )
                                     : Text(
                                         '@${course.classRoom}',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 9,
                                           shadows: [
                                             Shadow(
                                               offset: Offset(0, 1),
                                               blurRadius: 2,
-                                              color: Colors.black26,
+                                              color: palette.courseTextShadow,
                                             ),
                                           ],
                                         ),
@@ -367,10 +372,10 @@ class ScheduleGrid extends StatelessWidget {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                 if (!_isCourseInWeek(course, currentWeek))
-                                  const Text(
+                                  Text(
                                     '(非本周)',
                                     style: TextStyle(
-                                      color: Colors.white70,
+                                      color: palette.nonCurrentCourseLabel,
                                       fontSize: 9,
                                       fontStyle: FontStyle.italic,
                                     ),
@@ -439,7 +444,10 @@ class ScheduleGrid extends StatelessWidget {
                   provider.loadCourses(recalcWeek: false);
                 }
               },
-              child: const Text('删除', style: TextStyle(color: Colors.red)),
+              child: Text(
+                '删除',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ),
             TextButton(
               onPressed: () {
@@ -480,26 +488,26 @@ class ScheduleGrid extends StatelessWidget {
     return true;
   }
 
-  Color _getCourseColor(Course course, bool isCurrentWeek) {
-    if (course.isVirtual) return Colors.grey.shade300;
+  Color _getCourseColor(
+    Course course,
+    bool isCurrentWeek,
+    AppThemePalette palette,
+    AppCourseColorPalette courseColorPalette,
+    Brightness brightness,
+  ) {
+    if (course.isVirtual) return palette.virtualCourseFill;
 
-    final seed = '${course.courseName}_${course.teacher}_${course.classRoom}';
-    Color color = _parseColor(course.color, seed);
+    final seed = buildCourseColorSeed(course.courseName, course.teacher);
+    Color color = resolveCourseCardColor(
+      colorValue: course.color,
+      palette: courseColorPalette,
+      brightness: brightness,
+      seed: seed,
+    );
     if (!isCurrentWeek) {
-      return color.withOpacity(0.3);
+      return color.withValues(alpha: palette.nonCurrentCourseAlpha);
     }
     return color;
-  }
-
-  Color _parseColor(String? colorStr, String seed) {
-    if (colorStr != null && colorStr.startsWith('#')) {
-      try {
-        return Color(int.parse(colorStr.replaceFirst('#', '0xFF')));
-      } catch (e) {}
-    }
-    final hash = seed.hashCode;
-    final index = hash.abs() % Colors.primaries.length;
-    return Colors.primaries[index];
   }
 
   String _getDayName(int index) {
@@ -513,6 +521,7 @@ class ScheduleGrid extends StatelessWidget {
     String text, {
     required TextStyle baseStyle,
     int maxLines = 1,
+    required Color outlineColor,
   }) {
     return Stack(
       children: [
@@ -522,7 +531,7 @@ class ScheduleGrid extends StatelessWidget {
             foreground: Paint()
               ..style = PaintingStyle.stroke
               ..strokeWidth = 0.5
-              ..color = Colors.black,
+              ..color = outlineColor,
           ),
           maxLines: maxLines,
           overflow: TextOverflow.ellipsis,
@@ -538,6 +547,13 @@ class ScheduleGrid extends StatelessWidget {
       ],
     );
   }
+
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
+  }
 }
 
 class GridPainter extends CustomPainter {
@@ -549,6 +565,7 @@ class GridPainter extends CustomPainter {
   final int daysToShow;
   final bool showGridLines;
   final int classCount;
+  final Color lineColor;
 
   GridPainter({
     required this.timeColumnWidth,
@@ -559,6 +576,7 @@ class GridPainter extends CustomPainter {
     this.daysToShow = 7,
     this.showGridLines = true,
     required this.classCount,
+    required this.lineColor,
   });
 
   @override
@@ -566,7 +584,7 @@ class GridPainter extends CustomPainter {
     if (!showGridLines) return;
 
     final paint = Paint()
-      ..color = Colors.grey.withOpacity(0.3)
+      ..color = lineColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
@@ -596,6 +614,7 @@ class GridPainter extends CustomPainter {
     return oldDelegate.showGridLines != showGridLines ||
         oldDelegate.timeColumnWidth != timeColumnWidth ||
         oldDelegate.dayColumnWidth != dayColumnWidth ||
-        oldDelegate.rowHeight != rowHeight;
+        oldDelegate.rowHeight != rowHeight ||
+        oldDelegate.lineColor != lineColor;
   }
 }

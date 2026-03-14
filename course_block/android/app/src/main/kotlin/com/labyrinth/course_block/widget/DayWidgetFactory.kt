@@ -25,10 +25,12 @@ class DayWidgetFactory(
         val timeRange: String,
         val name: String,
         val room: String,
-        val status: String
+        val status: String,
+        val color: String,
     )
 
     private var items: List<CourseItem> = emptyList()
+    private lateinit var theme: WidgetColors.WidgetTheme
 
     override fun onCreate()         { loadData() }
     override fun onDataSetChanged() { loadData() }
@@ -37,6 +39,7 @@ class DayWidgetFactory(
     private fun loadData() {
         val prefs = context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
         val json  = prefs.getString("day_list", "[]") ?: "[]"
+        theme = WidgetColors.resolve(context, prefs)
         items = try {
             val arr = JSONArray(json)
             (0 until arr.length()).map { i ->
@@ -45,7 +48,8 @@ class DayWidgetFactory(
                     obj.optString("timeRange", ""),
                     obj.optString("name",      "--"),
                     obj.optString("room",      ""),
-                    obj.optString("status",    "upcoming")
+                    obj.optString("status",    "upcoming"),
+                    obj.optString("color",     ""),
                 )
             }
         } catch (e: Exception) {
@@ -61,9 +65,9 @@ class DayWidgetFactory(
     override fun getLoadingView(): RemoteViews? = null
 
     override fun getViewAt(position: Int): RemoteViews {
-        val item  = items.getOrNull(position) ?: CourseItem("", "--", "", "upcoming")
+        val item  = items.getOrNull(position) ?: CourseItem("", "--", "", "upcoming", "")
         val rv    = RemoteViews(context.packageName, R.layout.widget_day_card)
-        val color = WidgetColors.forCourse(item.name)
+        val color = WidgetColors.forCourse(item.name, theme, item.color)
         val info  = listOf(item.room, item.timeRange).filter { it.isNotEmpty() }.joinToString("  ")
 
         rv.setTextViewText(R.id.day_card_name, item.name)
@@ -71,10 +75,14 @@ class DayWidgetFactory(
 
         when (item.status) {
             "done" -> {
-                val gray = Color.parseColor("#9E9E9E")
-                rv.setInt(R.id.day_card_root, "setBackgroundColor", Color.parseColor("#F0F0F0"))
-                rv.setTextColor(R.id.day_card_name, gray)
-                rv.setTextColor(R.id.day_card_info, gray)
+                val doneText = WidgetColors.doneText(theme)
+                rv.setInt(
+                    R.id.day_card_root,
+                    "setBackgroundColor",
+                    WidgetColors.doneBackground(theme)
+                )
+                rv.setTextColor(R.id.day_card_name, doneText)
+                rv.setTextColor(R.id.day_card_info, doneText)
             }
             "current" -> {
                 rv.setInt(R.id.day_card_root, "setBackgroundColor", color)
@@ -82,9 +90,16 @@ class DayWidgetFactory(
                 rv.setTextColor(R.id.day_card_info, Color.argb(200, 255, 255, 255))
             }
             else -> { // upcoming
-                rv.setInt(R.id.day_card_root, "setBackgroundColor", WidgetColors.withAlpha(color, 51))
+                rv.setInt(
+                    R.id.day_card_root,
+                    "setBackgroundColor",
+                    WidgetColors.upcomingFill(theme, color)
+                )
                 rv.setTextColor(R.id.day_card_name, color)
-                rv.setTextColor(R.id.day_card_info, WidgetColors.withAlpha(color, 180))
+                rv.setTextColor(
+                    R.id.day_card_info,
+                    WidgetColors.withAlpha(color, if (theme.isDark) 220 else 180)
+                )
             }
         }
 

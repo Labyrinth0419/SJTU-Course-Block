@@ -1,9 +1,11 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:home_widget/home_widget.dart';
 
 import '../models/course.dart';
 import '../models/schedule.dart';
+import '../theme/app_theme.dart';
 import '../utils/time_slots.dart';
 
 class WidgetSyncService {
@@ -27,8 +29,30 @@ class WidgetSyncService {
     List<Course> courses,
     Schedule? schedule, {
     required int totalWeeks,
+    required AppThemeScheme themeScheme,
+    required ThemeMode themeMode,
+    required AppCourseColorPalette courseColorPalette,
   }) async {
-    if (schedule == null) return;
+    await HomeWidget.saveWidgetData('theme_scheme', themeScheme.storageKey);
+    await HomeWidget.saveWidgetData(
+      'theme_mode',
+      _themeModeToStorage(themeMode),
+    );
+    await HomeWidget.saveWidgetData(
+      'course_palette',
+      courseColorPalette.storageKey,
+    );
+
+    if (schedule == null) {
+      await HomeWidget.saveWidgetData('today_header', '课程表');
+      await HomeWidget.saveWidgetData('today_subtitle', '');
+      await HomeWidget.saveWidgetData('today_list', '[]');
+      await HomeWidget.saveWidgetData('day_list', '[]');
+      await HomeWidget.saveWidgetData('upcoming_list', '[]');
+      await HomeWidget.saveWidgetData('week_list', '[]');
+      await _updateAllWidgets();
+      return;
+    }
 
     final today = normalizeDate(DateTime.now());
     final start = normalizeDate(schedule.startDate);
@@ -50,11 +74,10 @@ class WidgetSyncService {
 
     final payload = todayCourses
         .map(
-          (c) => {
-            'name': c.courseName,
-            'room': c.classRoom,
-            'timeRange': _formatTimeRange(c.startNode, c.step),
-          },
+          (c) => _coursePayload(
+            c,
+            timeRange: _formatTimeRange(c.startNode, c.step),
+          ),
         )
         .toList();
 
@@ -85,9 +108,7 @@ class WidgetSyncService {
         status = 'upcoming';
       }
       return {
-        'name': c.courseName,
-        'room': c.classRoom,
-        'timeRange': _formatTimeRange(c.startNode, c.step),
+        ..._coursePayload(c, timeRange: _formatTimeRange(c.startNode, c.step)),
         'status': status,
       };
     }).toList();
@@ -124,9 +145,10 @@ class WidgetSyncService {
       for (final c in dayCourses) {
         upcomingItems.add({
           't': 'course',
-          'name': c.courseName,
-          'room': c.classRoom,
-          'timeRange': _formatTimeRange(c.startNode, c.step),
+          ..._coursePayload(
+            c,
+            timeRange: _formatTimeRange(c.startNode, c.step),
+          ),
         });
       }
     }
@@ -159,14 +181,42 @@ class WidgetSyncService {
       for (final c in dayCourses) {
         weekItems.add({
           't': 'course',
-          'name': c.courseName,
-          'room': c.classRoom,
-          'timeRange': _formatTimeRange(c.startNode, c.step),
+          ..._coursePayload(
+            c,
+            timeRange: _formatTimeRange(c.startNode, c.step),
+          ),
         });
       }
     }
 
     await HomeWidget.saveWidgetData('week_list', jsonEncode(weekItems));
+    await HomeWidget.updateWidget(androidName: 'widget.WeekWidgetProvider');
+  }
+
+  Map<String, String> _coursePayload(
+    Course course, {
+    required String timeRange,
+  }) {
+    return {
+      'name': course.courseName,
+      'room': course.classRoom,
+      'timeRange': timeRange,
+      'color': course.color,
+    };
+  }
+
+  String _themeModeToStorage(ThemeMode mode) {
+    return switch (mode) {
+      ThemeMode.light => 'light',
+      ThemeMode.dark => 'dark',
+      ThemeMode.system => 'system',
+    };
+  }
+
+  Future<void> _updateAllWidgets() async {
+    await HomeWidget.updateWidget(androidName: 'widget.TodayWidgetProvider');
+    await HomeWidget.updateWidget(androidName: 'widget.DayWidgetProvider');
+    await HomeWidget.updateWidget(androidName: 'widget.UpcomingWidgetProvider');
     await HomeWidget.updateWidget(androidName: 'widget.WeekWidgetProvider');
   }
 

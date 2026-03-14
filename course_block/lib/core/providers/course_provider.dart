@@ -3,6 +3,7 @@ import 'package:flutter_dynamic_icon_plus/flutter_dynamic_icon_plus.dart';
 import '../../core/db/database_helper.dart';
 import '../../core/models/course.dart';
 import '../../core/models/schedule.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/services/course_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,6 +20,8 @@ import '../services/widget_sync_service.dart';
 class CourseProvider extends ChangeNotifier {
   static const String defaultScheduleName = '默认课表';
   static const String _themeModeKey = 'theme_mode';
+  static const String _themeSchemeKey = 'theme_scheme';
+  static const String _courseColorPaletteKey = 'course_color_palette';
   static const String _launcherIconKey = 'app_icon_choice';
 
   static const String _showGridLinesKey = 'show_grid_lines';
@@ -62,6 +65,8 @@ class CourseProvider extends ChangeNotifier {
   bool _showSunday = true;
   bool _outlineText = false;
   ThemeMode _themeMode = ThemeMode.system;
+  AppThemeScheme _themeScheme = AppThemeScheme.morningMist;
+  AppCourseColorPalette _courseColorPalette = AppCourseColorPalette.candyBox;
   int _maxDailyClasses = 14;
   int _totalWeeks = 20;
   double _gridHeight = 64.0;
@@ -93,6 +98,8 @@ class CourseProvider extends ChangeNotifier {
   bool get showSunday => _showSunday;
   bool get outlineText => _outlineText;
   ThemeMode get themeMode => _themeMode;
+  AppThemeScheme get themeScheme => _themeScheme;
+  AppCourseColorPalette get courseColorPalette => _courseColorPalette;
   int get maxDailyClasses => _maxDailyClasses;
   int get totalWeeks => _totalWeeks;
   double get gridHeight => _gridHeight;
@@ -139,7 +146,10 @@ class CourseProvider extends ChangeNotifier {
       'schedule_${scheduleId}_$key';
 
   bool _isAppSettingKey(String key) =>
-      key == _themeModeKey || key == _launcherIconKey;
+      key == _themeModeKey ||
+      key == _themeSchemeKey ||
+      key == _courseColorPaletteKey ||
+      key == _launcherIconKey;
 
   void _clampCurrentWeek() {
     if (_currentWeek < 1) {
@@ -256,6 +266,10 @@ class CourseProvider extends ChangeNotifier {
     if (_launcherIcon != null) {
       _applyLauncherIcon(_launcherIcon);
     }
+    _themeScheme = appThemeSchemeFromStorage(prefs.getString(_themeSchemeKey));
+    _courseColorPalette = appCourseColorPaletteFromStorage(
+      prefs.getString(_courseColorPaletteKey),
+    );
     final mode = prefs.getString(_themeModeKey);
     switch (mode) {
       case 'light':
@@ -358,6 +372,10 @@ class CourseProvider extends ChangeNotifier {
 
   Future<void> updateAppSetting(String key, dynamic value) async {
     final prefs = await SharedPreferences.getInstance();
+    final shouldRefreshWidgets =
+        key == _themeModeKey ||
+        key == _themeSchemeKey ||
+        key == _courseColorPaletteKey;
     if (value == null) {
       if (key == _launcherIconKey) {
         await prefs.remove(key);
@@ -378,12 +396,21 @@ class CourseProvider extends ChangeNotifier {
             _themeMode = ThemeMode.system;
         }
       }
+      if (key == _themeSchemeKey) {
+        _themeScheme = appThemeSchemeFromStorage(value);
+      }
+      if (key == _courseColorPaletteKey) {
+        _courseColorPalette = appCourseColorPaletteFromStorage(value);
+      }
       if (key == _launcherIconKey) {
         _launcherIcon = value;
         await _applyLauncherIcon(value);
       }
     }
     notifyListeners();
+    if (shouldRefreshWidgets) {
+      await _updateWidgetsSafe();
+    }
   }
 
   Future<void> updateCurrentScheduleSetting(String key, dynamic value) async {
@@ -559,10 +586,15 @@ class CourseProvider extends ChangeNotifier {
       var fetchedCourses = await _courseService.fetchUndergraduateCourses(
         year,
         term,
+        courseColorPalette: _courseColorPalette,
       );
 
       if (fetchedCourses.isEmpty) {
-        fetchedCourses = await _courseService.fetchGraduateCourses(year, term);
+        fetchedCourses = await _courseService.fetchGraduateCourses(
+          year,
+          term,
+          courseColorPalette: _courseColorPalette,
+        );
       }
 
       if (fetchedCourses.isEmpty) {
@@ -904,7 +936,9 @@ class CourseProvider extends ChangeNotifier {
           isOddWeek: false,
           isEvenWeek: false,
           weekCode: null,
-          color: '#FF5722',
+          color: _courseColorPalette.autoColorToken(
+            buildCourseColorSeed(summary, ''),
+          ),
         ),
       );
     }
@@ -972,6 +1006,9 @@ class CourseProvider extends ChangeNotifier {
         _courses,
         _currentSchedule,
         totalWeeks: _totalWeeks,
+        themeScheme: _themeScheme,
+        themeMode: _themeMode,
+        courseColorPalette: _courseColorPalette,
       );
     } catch (e) {
       debugPrint('Widget update error: $e');

@@ -76,6 +76,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
         widgetData: SharedPreferences
     ) {
         val views = RemoteViews(context.packageName, R.layout.widget_today)
+        val theme = WidgetColors.resolve(context, widgetData)
 
         val header   = widgetData.getString("today_header",   "今日课程") ?: "今日课程"
         val subtitle = widgetData.getString("today_subtitle", "")         ?: ""
@@ -83,8 +84,16 @@ class TodayWidgetProvider : AppWidgetProvider() {
 
         Log.d(TAG, "Widget data — header=$header  subtitle=$subtitle  list=$listJson")
 
+        views.setInt(R.id.widget_root, "setBackgroundResource", theme.backgroundRes)
         views.setTextViewText(R.id.tv_header,   header)
         views.setTextViewText(R.id.tv_subtitle, subtitle)
+        views.setTextColor(R.id.tv_header, theme.headerText)
+        views.setTextColor(R.id.tv_subtitle, theme.subtitleText)
+        views.setTextColor(R.id.tv_empty, theme.emptyText)
+        views.setTextColor(R.id.btn_refresh, theme.accent)
+        views.setTextColor(R.id.btn_open, theme.openText)
+        views.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
+        views.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
 
         // 绑定可滚动 ListView 适配器
         // 每个 widgetId 使用独立 URI，避免多实例时 PendingIntent 被复用
@@ -149,9 +158,19 @@ class TodayWidgetProvider : AppWidgetProvider() {
         widgetId: Int
     ) {
         try {
+            val prefs = context.getSharedPreferences(prefsName(context), Context.MODE_PRIVATE)
+            val theme = WidgetColors.resolve(context, prefs)
             val fallback = RemoteViews(context.packageName, R.layout.widget_today)
+            fallback.setInt(R.id.widget_root, "setBackgroundResource", theme.backgroundRes)
             fallback.setTextViewText(R.id.tv_header,   "课程表")
             fallback.setTextViewText(R.id.tv_subtitle, "点击刷新")
+            fallback.setTextColor(R.id.tv_header, theme.headerText)
+            fallback.setTextColor(R.id.tv_subtitle, theme.subtitleText)
+            fallback.setTextColor(R.id.tv_empty, theme.emptyText)
+            fallback.setTextColor(R.id.btn_refresh, theme.accent)
+            fallback.setTextColor(R.id.btn_open, theme.openText)
+            fallback.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
+            fallback.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
             fallback.setViewVisibility(R.id.tv_empty,        View.VISIBLE)
             fallback.setViewVisibility(R.id.widget_list_view, View.GONE)
             attachOpenIntent(context, fallback)

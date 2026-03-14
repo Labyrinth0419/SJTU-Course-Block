@@ -21,9 +21,15 @@ class CourseWidgetFactory(
         private const val TAG = "CourseWidgetFactory"
     }
 
-    private data class CourseItem(val timeRange: String, val name: String, val room: String)
+    private data class CourseItem(
+        val timeRange: String,
+        val name: String,
+        val room: String,
+        val color: String,
+    )
 
     private var items: List<CourseItem> = emptyList()
+    private lateinit var theme: WidgetColors.WidgetTheme
 
     // ──────────────────────────────────────────────────────────────────────────
     // Factory 生命周期
@@ -49,6 +55,7 @@ class CourseWidgetFactory(
     private fun loadData() {
         val prefs = context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
         val listJson = prefs.getString("today_list", "[]") ?: "[]"
+        theme = WidgetColors.resolve(context, prefs)
         Log.d(TAG, "loadData: $listJson")
 
         items = try {
@@ -58,7 +65,8 @@ class CourseWidgetFactory(
                 val name      = obj.optString("name",      "")
                 val room      = obj.optString("room",      "")
                 val timeRange = obj.optString("timeRange", "")
-                CourseItem(timeRange, name.ifEmpty { "--" }, room)
+                val color     = obj.optString("color",     "")
+                CourseItem(timeRange, name.ifEmpty { "--" }, room, color)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to parse today_list", e)
@@ -81,13 +89,15 @@ class CourseWidgetFactory(
     override fun getLoadingView(): RemoteViews? = null
 
     override fun getViewAt(position: Int): RemoteViews {
-        val item  = items.getOrNull(position) ?: CourseItem("", "--", "")
+        val item  = items.getOrNull(position) ?: CourseItem("", "--", "", "")
         val rv    = RemoteViews(context.packageName, R.layout.widget_course_row)
-        val color = WidgetColors.forCourse(item.name)
+        val color = WidgetColors.forCourse(item.name, theme, item.color)
 
         rv.setTextViewText(R.id.row_title,  item.name)
         rv.setTextViewText(R.id.row_detail, if (item.room.isNotEmpty()) "📍 ${item.room}" else "")
         rv.setTextViewText(R.id.row_time,   item.timeRange)
+        rv.setTextColor(R.id.row_title, theme.courseTitle)
+        rv.setTextColor(R.id.row_detail, theme.courseDetail)
         rv.setInt(R.id.row_bar,  "setBackgroundColor", color)
         rv.setTextColor(R.id.row_time, color)
         rv.setViewVisibility(R.id.row_detail, if (item.room.isEmpty())      View.GONE else View.VISIBLE)

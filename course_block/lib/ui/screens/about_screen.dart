@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/theme/app_theme.dart';
+
 const _repoUrl = 'https://github.com/Labyrinth0419/SJTU-Course-Block';
 
 class AboutScreen extends StatefulWidget {
@@ -36,6 +38,7 @@ class _AboutScreenState extends State<AboutScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette = context.appTheme;
     final versionText = _version.isEmpty
         ? '读取中'
         : _buildNumber.isEmpty
@@ -60,8 +63,11 @@ class _AboutScreenState extends State<AboutScreen> {
                     width: 58,
                     height: 58,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF8EA8FF), Color(0xFF62D3C7)],
+                      gradient: LinearGradient(
+                        colors: [
+                          palette.aboutGradientStart,
+                          palette.aboutGradientEnd,
+                        ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),

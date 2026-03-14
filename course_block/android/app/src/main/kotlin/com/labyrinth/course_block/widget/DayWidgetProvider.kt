@@ -42,13 +42,22 @@ class DayWidgetProvider : AppWidgetProvider() {
         appWidgetIds: IntArray
     ) {
         val prefs = context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
+        val theme = WidgetColors.resolve(context, prefs)
         for (widgetId in appWidgetIds) {
             try {
                 val views    = RemoteViews(context.packageName, R.layout.widget_today)
                 val header   = prefs.getString("today_header",   "今日日程") ?: "今日日程"
                 val subtitle = prefs.getString("today_subtitle", "")         ?: ""
+                views.setInt(R.id.widget_root, "setBackgroundResource", theme.backgroundRes)
                 views.setTextViewText(R.id.tv_header,   header)
                 views.setTextViewText(R.id.tv_subtitle, subtitle)
+                views.setTextColor(R.id.tv_header, theme.headerText)
+                views.setTextColor(R.id.tv_subtitle, theme.subtitleText)
+                views.setTextColor(R.id.tv_empty, theme.emptyText)
+                views.setTextColor(R.id.btn_refresh, theme.accent)
+                views.setTextColor(R.id.btn_open, theme.openText)
+                views.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
+                views.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
 
                 val serviceIntent = Intent(context, DayWidgetService::class.java).apply {
                     putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
@@ -82,7 +91,15 @@ class DayWidgetProvider : AppWidgetProvider() {
                 Log.e(TAG, "Failed to update widget $widgetId", e)
                 try {
                     val fb = RemoteViews(context.packageName, R.layout.widget_today)
+                    fb.setInt(R.id.widget_root, "setBackgroundResource", theme.backgroundRes)
                     fb.setTextViewText(R.id.tv_header, "今日日程")
+                    fb.setTextColor(R.id.tv_header, theme.headerText)
+                    fb.setTextColor(R.id.tv_subtitle, theme.subtitleText)
+                    fb.setTextColor(R.id.tv_empty, theme.emptyText)
+                    fb.setTextColor(R.id.btn_refresh, theme.accent)
+                    fb.setTextColor(R.id.btn_open, theme.openText)
+                    fb.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
+                    fb.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
                     fb.setViewVisibility(R.id.tv_empty,         View.VISIBLE)
                     fb.setViewVisibility(R.id.widget_list_view, View.GONE)
                     appWidgetManager.updateAppWidget(widgetId, fb)

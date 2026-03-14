@@ -1,6 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" ?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_today_bg"
@@ -47,6 +48,7 @@
 
     <!-- 分割线（TextView 替代 View，避免 Vivo OriginOS inflate 失败）-->
     <TextView
+        android:id="@+id/divider_top"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="4dp"
@@ -80,6 +82,7 @@
 
     <!-- 底部分割线 -->
     <TextView
+        android:id="@+id/divider_bottom"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginBottom="4dp"

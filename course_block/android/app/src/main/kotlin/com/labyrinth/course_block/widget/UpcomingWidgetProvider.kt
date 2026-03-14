@@ -38,19 +38,35 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
         appWidgetIds: IntArray
     ) {
         val prefs = context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
+        val theme = WidgetColors.resolve(context, prefs)
         for (widgetId in appWidgetIds) {
             try {
                 val views   = RemoteViews(context.packageName, R.layout.widget_upcoming)
                 val header   = prefs.getString("today_header",   "近日课程") ?: "近日课程"
                 val subtitle = prefs.getString("today_subtitle", "") ?: ""
+                views.setInt(R.id.widget_root, "setBackgroundResource", theme.backgroundRes)
                 views.setTextViewText(R.id.tv_header,   header)
                 views.setTextViewText(R.id.tv_subtitle, subtitle)
+                views.setTextColor(R.id.tv_header, theme.headerText)
+                views.setTextColor(R.id.tv_subtitle, theme.subtitleText)
+                views.setTextColor(R.id.lbl_today, theme.headerText)
+                views.setTextColor(R.id.lbl_tmr, theme.subtitleText)
+                views.setTextColor(R.id.btn_refresh, theme.accent)
+                views.setTextColor(R.id.btn_open, theme.openText)
+                views.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
+                views.setInt(R.id.divider_center, "setBackgroundColor", theme.divider)
+                views.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
 
                 // ── 解析 upcoming_list ──────────────────────────────────────────────
                 val json = prefs.getString("upcoming_list", "[]") ?: "[]"
                 val arr  = JSONArray(json)
 
-                data class CourseRow(val name: String, val room: String, val timeRange: String)
+                data class CourseRow(
+                    val name: String,
+                    val room: String,
+                    val timeRange: String,
+                    val color: String,
+                )
                 data class Group(val label: String, val courses: MutableList<CourseRow> = mutableListOf())
 
                 val groups = mutableListOf<Group>()
@@ -62,7 +78,8 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
                             CourseRow(
                                 obj.optString("name",      "--"),
                                 obj.optString("room",      ""),
-                                obj.optString("timeRange", "")
+                                obj.optString("timeRange", ""),
+                                obj.optString("color",     ""),
                             )
                         )
                     }
@@ -77,17 +94,20 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
                         val rv = RemoteViews(context.packageName, R.layout.widget_mini_card)
                         rv.setTextViewText(R.id.mini_name, "暂无课程")
                         rv.setTextViewText(R.id.mini_info, "")
-                        rv.setInt(R.id.mini_bar, "setBackgroundColor", Color.parseColor("#BDBDBD"))
+                        rv.setTextColor(R.id.mini_name, theme.emptyText)
+                        rv.setTextColor(R.id.mini_info, theme.courseDetail)
+                        rv.setInt(R.id.mini_bar, "setBackgroundColor", WidgetColors.withAlpha(theme.emptyText, 180))
                         views.addView(colId, rv)
                         return
                     }
                     for (c in courses) {
                         val rv    = RemoteViews(context.packageName, R.layout.widget_mini_card)
-                        val color = WidgetColors.forCourse(c.name)
+                        val color = WidgetColors.forCourse(c.name, theme, c.color)
                         val info  = listOf(c.room, c.timeRange)
                             .filter { it.isNotEmpty() }.joinToString(" ")
                         rv.setTextViewText(R.id.mini_name, c.name)
                         rv.setTextViewText(R.id.mini_info, info)
+                        rv.setTextColor(R.id.mini_name, theme.courseTitle)
                         rv.setInt(R.id.mini_bar, "setBackgroundColor", color)
                         rv.setTextColor(R.id.mini_info, color)
                         views.addView(colId, rv)

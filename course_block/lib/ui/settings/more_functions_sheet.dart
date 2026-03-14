@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/schedule.dart';
 import '../../core/providers/course_provider.dart';
+import '../../core/theme/app_theme.dart';
 import '../login/login_selection_screen.dart';
 import '../screens/about_screen.dart';
 import '../screens/faq_screen.dart';
@@ -84,10 +85,7 @@ Future<void> showMoreFunctionsSheet(BuildContext context) {
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => FractionallySizedBox(
-      heightFactor: 0.82,
-      child: _MoreFunctionsSheet(rootContext: context),
-    ),
+    builder: (_) => _MoreFunctionsSheet(rootContext: context),
   );
 }
 
@@ -175,15 +173,14 @@ class _FloatingSheetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final palette = context.appTheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1F2230) : Colors.white,
+        color: palette.floatingSheetSurface,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.24 : 0.08),
+            color: palette.floatingSheetShadow,
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -208,6 +205,7 @@ class _PanelTitleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette = context.appTheme;
     return Row(
       children: [
         Text(
@@ -224,7 +222,7 @@ class _PanelTitleRow extends StatelessWidget {
             padding: EdgeInsets.zero,
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            foregroundColor: const Color(0xFF70739B),
+            foregroundColor: palette.floatingSheetAction,
           ),
           child: Text(
             actionLabel,
@@ -251,17 +249,13 @@ class _WeekStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final trackColor = isDark
-        ? const Color(0xFF2B3144)
-        : const Color(0xFFE9E8FF);
+    final palette = context.appTheme;
 
     return Container(
       height: 34,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: trackColor,
+        color: palette.weekStripBackground,
         borderRadius: BorderRadius.circular(17),
       ),
       child: Row(
@@ -270,7 +264,7 @@ class _WeekStrip extends StatelessWidget {
             width: 20,
             height: 20,
             decoration: BoxDecoration(
-              color: const Color(0xFF4E5FC7),
+              color: palette.weekStripAccent,
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
@@ -284,10 +278,10 @@ class _WeekStrip extends StatelessWidget {
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 8,
-                activeTrackColor: trackColor,
-                inactiveTrackColor: trackColor,
-                thumbColor: const Color(0xFF595B81),
-                overlayColor: const Color(0x22595B81),
+                activeTrackColor: palette.weekStripBackground,
+                inactiveTrackColor: palette.weekStripBackground,
+                thumbColor: palette.weekStripThumb,
+                overlayColor: palette.weekStripThumb.withValues(alpha: 0.14),
                 thumbShape: const RoundSliderThumbShape(
                   enabledThumbRadius: 4.5,
                 ),
@@ -366,6 +360,7 @@ class _ScheduleSwitchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.read<CourseProvider>();
     final theme = Theme.of(context);
+    final palette = context.appTheme;
     final isCurrent = schedule.isCurrent;
     final textColor = isCurrent ? Colors.white : theme.colorScheme.onSurface;
 
@@ -384,8 +379,11 @@ class _ScheduleSwitchCard extends StatelessWidget {
           width: 92,
           decoration: BoxDecoration(
             gradient: isCurrent
-                ? const LinearGradient(
-                    colors: [Color(0xFFABC0FF), Color(0xFF7E96F0)],
+                ? LinearGradient(
+                    colors: [
+                      palette.currentScheduleGradientStart,
+                      palette.currentScheduleGradientEnd,
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   )
@@ -449,7 +447,7 @@ class _ToolStrip extends StatelessWidget {
     final tools = [
       _ToolAction(
         icon: Icons.tune_rounded,
-        iconColor: const Color(0xFF3D3D52),
+        iconColor: context.appTheme.toolSettingColor,
         label: '课表设置',
         onTap: () => _dismissAndRun(context, () async {
           await Navigator.of(rootContext).push(
@@ -459,7 +457,7 @@ class _ToolStrip extends StatelessWidget {
       ),
       _ToolAction(
         icon: Icons.help_outline_rounded,
-        iconColor: const Color(0xFF44506A),
+        iconColor: context.appTheme.toolHelpColor,
         label: '常见问题',
         onTap: () => _dismissAndRun(context, () async {
           await Navigator.of(
@@ -469,7 +467,7 @@ class _ToolStrip extends StatelessWidget {
       ),
       _ToolAction(
         icon: Icons.info_outline_rounded,
-        iconColor: const Color(0xFF5C4C68),
+        iconColor: context.appTheme.toolAboutColor,
         label: '关于',
         onTap: () => _dismissAndRun(context, () async {
           await Navigator.of(
@@ -479,7 +477,7 @@ class _ToolStrip extends StatelessWidget {
       ),
       _ToolAction(
         icon: Icons.settings_rounded,
-        iconColor: const Color(0xFF6A5B45),
+        iconColor: context.appTheme.toolGlobalColor,
         label: '全局设置',
         onTap: () => _dismissAndRun(context, () async {
           await Navigator.of(

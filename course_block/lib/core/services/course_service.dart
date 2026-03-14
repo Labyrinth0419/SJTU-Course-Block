@@ -1,9 +1,11 @@
 import 'dart:convert';
-import 'dart:math';
+
 import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/course.dart';
+import '../theme/app_theme.dart';
 import '../utils/week_utils.dart';
 
 class CourseService {
@@ -16,8 +18,9 @@ class CourseService {
 
   Future<List<Course>> fetchUndergraduateCourses(
     String year,
-    String term,
-  ) async {
+    String term, {
+    required AppCourseColorPalette courseColorPalette,
+  }) async {
     String xqm = '3';
     if (term == '2') {
       xqm = '12';
@@ -48,7 +51,11 @@ class CourseService {
 
         if (json.containsKey('kbList')) {
           final List<dynamic> kbList = json['kbList'];
-          return kbList.map((item) => _parseUndergraduateCourse(item)).toList();
+          return kbList
+              .map(
+                (item) => _parseUndergraduateCourse(item, courseColorPalette),
+              )
+              .toList();
         }
       }
     } catch (e) {
@@ -57,7 +64,11 @@ class CourseService {
     return [];
   }
 
-  Future<List<Course>> fetchGraduateCourses(String year, String term) async {
+  Future<List<Course>> fetchGraduateCourses(
+    String year,
+    String term, {
+    required AppCourseColorPalette courseColorPalette,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cookies = prefs.getString('cookies') ?? '';
@@ -82,7 +93,7 @@ class CourseService {
             : data;
         try {
           final rows = json['datas']['xspkjgcx']['rows'] as List<dynamic>;
-          return _parseGraduateCourses(rows);
+          return _parseGraduateCourses(rows, courseColorPalette);
         } catch (e) {
           debugPrint('Grad course parse error: $e');
         }
@@ -101,7 +112,10 @@ class CourseService {
     return '${year}09';
   }
 
-  Course _parseUndergraduateCourse(Map<String, dynamic> json) {
+  Course _parseUndergraduateCourse(
+    Map<String, dynamic> json,
+    AppCourseColorPalette courseColorPalette,
+  ) {
     final startStep = WeekUtils.getStartAndStep(json['jcs'] as String? ?? '');
 
     final weekCode = WeekUtils.parseWeekCode(json['zcd'] as String? ?? '');
@@ -145,12 +159,20 @@ class CourseService {
       isOddWeek: isOdd,
       isEvenWeek: isEven,
       weekCode: weekCode,
-      color: Course.COLORS[Random().nextInt(Course.COLORS.length)],
+      color: courseColorPalette.autoColorToken(
+        buildCourseColorSeed(
+          json['kcmc']?.toString() ?? '',
+          json['xm']?.toString() ?? '',
+        ),
+      ),
       isVirtual: (json['xkbz'] as String? ?? '').contains('虚拟'),
     );
   }
 
-  List<Course> _parseGraduateCourses(List<dynamic> rows) {
+  List<Course> _parseGraduateCourses(
+    List<dynamic> rows,
+    AppCourseColorPalette courseColorPalette,
+  ) {
     final Map<String, Course> map = {};
     final Map<String, int> endMap = {};
 
@@ -177,7 +199,12 @@ class CourseService {
           isOddWeek: parsedWeeks.isOdd,
           isEvenWeek: parsedWeeks.isEven,
           weekCode: parsedWeeks.weekCode,
-          color: Course.COLORS[Random().nextInt(Course.COLORS.length)],
+          color: courseColorPalette.autoColorToken(
+            buildCourseColorSeed(
+              row['KCMC']?.toString() ?? '',
+              row['JSXM']?.toString() ?? '',
+            ),
+          ),
           isVirtual: false,
         );
         map[classId] = course;

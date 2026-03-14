@@ -1,6 +1,8 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!-- 一周课程：五栏网格布局（Mon | Tue | Wed | Thu | Fri），课程卡片通过 addView() 动态填充 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_today_bg"
@@ -8,14 +10,16 @@
     android:paddingLeft="8dp"
     android:paddingRight="8dp"
     android:paddingTop="6dp"
-    android:paddingBottom="8dp">
+    android:paddingBottom="8dp"
+>
 
     <!-- 头部 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+    >
 
         <TextView
             android:id="@+id/tv_header"
@@ -27,7 +31,8 @@
             android:text="一周课程"
             android:textColor="@color/widget_header_text"
             android:textSize="12sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+        />
 
         <TextView
             android:id="@+id/tv_subtitle"
@@ -35,24 +40,28 @@
             android:layout_height="wrap_content"
             android:text="本周"
             android:textColor="@color/widget_subtitle_text"
-            android:textSize="10sp" />
+            android:textSize="10sp"
+        />
 
     </LinearLayout>
 
     <!-- 分割线 -->
     <TextView
+        android:id="@+id/divider_top"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="4dp"
         android:layout_marginBottom="3dp"
-        android:background="@color/widget_divider" />
+        android:background="@color/widget_divider"
+    />
 
     <!-- 五栏主体：周一 ~ 周五 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+    >
 
         <!-- 第 1 栏：Mon -->
         <LinearLayout
@@ -61,12 +70,15 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingEnd="2dp" />
+            android:paddingEnd="2dp"
+        />
 
         <TextView
+            android:id="@+id/divider_v1"
             android:layout_width="1dp"
             android:layout_height="match_parent"
-            android:background="@color/widget_divider" />
+            android:background="@color/widget_divider"
+        />
 
         <!-- 第 2 栏：Tue -->
         <LinearLayout
@@ -76,12 +88,15 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:paddingStart="2dp"
-            android:paddingEnd="2dp" />
+            android:paddingEnd="2dp"
+        />
 
         <TextView
+            android:id="@+id/divider_v2"
             android:layout_width="1dp"
             android:layout_height="match_parent"
-            android:background="@color/widget_divider" />
+            android:background="@color/widget_divider"
+        />
 
         <!-- 第 3 栏：Wed -->
         <LinearLayout
@@ -91,12 +106,15 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:paddingStart="2dp"
-            android:paddingEnd="2dp" />
+            android:paddingEnd="2dp"
+        />
 
         <TextView
+            android:id="@+id/divider_v3"
             android:layout_width="1dp"
             android:layout_height="match_parent"
-            android:background="@color/widget_divider" />
+            android:background="@color/widget_divider"
+        />
 
         <!-- 第 4 栏：Thu -->
         <LinearLayout
@@ -106,12 +124,15 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:paddingStart="2dp"
-            android:paddingEnd="2dp" />
+            android:paddingEnd="2dp"
+        />
 
         <TextView
+            android:id="@+id/divider_v4"
             android:layout_width="1dp"
             android:layout_height="match_parent"
-            android:background="@color/widget_divider" />
+            android:background="@color/widget_divider"
+        />
 
         <!-- 第 5 栏：Fri -->
         <LinearLayout
@@ -120,23 +141,27 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingStart="2dp" />
+            android:paddingStart="2dp"
+        />
 
     </LinearLayout>
 
     <!-- 底部分割线 -->
     <TextView
+        android:id="@+id/divider_bottom"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginBottom="4dp"
-        android:background="@color/widget_divider" />
+        android:background="@color/widget_divider"
+    />
 
     <!-- 底部操作行 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+    >
 
         <TextView
             android:id="@+id/btn_refresh"
@@ -145,12 +170,14 @@
             android:text="↻"
             android:textColor="@color/widget_subtitle_text"
             android:textSize="14sp"
-            android:padding="2dp" />
+            android:padding="2dp"
+        />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="1dp"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+        />
 
         <TextView
             android:id="@+id/btn_open"
@@ -159,7 +186,8 @@
             android:text="打开 →"
             android:textColor="@color/widget_subtitle_text"
             android:textSize="10sp"
-            android:padding="2dp" />
+            android:padding="2dp"
+        />
 
     </LinearLayout>
 
