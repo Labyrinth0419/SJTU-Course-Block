@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/providers/course_provider.dart';
+import '../../core/services/login_session.dart';
 import '../../core/theme/app_theme.dart';
 import '../../ui/login/login_selection_screen.dart';
 import '../screens/faq_screen.dart';
@@ -24,16 +24,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final summary = await LoginSessionStorage.loadSummary();
     if (!mounted) return;
     setState(() {
-      _userInfo = prefs.getString('user_info');
-      if (_userInfo == null) {
-        final cookies = prefs.getString('cookies');
-        if (cookies != null && cookies.isNotEmpty) {
-          _userInfo = '已登录';
-        }
-      }
+      _userInfo = summary.displayText;
     });
   }
 
@@ -161,9 +155,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirm != true) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('cookies');
-    await prefs.remove('user_info');
+    await LoginSessionStorage.clearAll();
     if (!mounted || !context.mounted) return;
 
     setState(() {

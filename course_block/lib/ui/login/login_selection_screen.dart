@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/services/login_session.dart';
 import '../../core/theme/app_theme.dart';
 import 'webview_login_screen.dart';
 
@@ -77,6 +78,7 @@ class LoginSelectionScreen extends StatelessWidget {
             onTap: () => _openLogin(
               context,
               initialUrl: 'https://i.sjtu.edu.cn/jaccountlogin',
+              loginSystem: AcademicLoginSystem.undergraduate,
               title: '本科生登录',
             ),
           ),
@@ -85,11 +87,12 @@ class LoginSelectionScreen extends StatelessWidget {
             icon: Icons.auto_stories_rounded,
             color: theme.colorScheme.secondaryContainer,
             title: '研究生教务系统',
-            subtitle: '适用于研究生课表入口',
+            subtitle: '适用于研究生当前学期课表同步',
             onTap: () => _openLogin(
               context,
               initialUrl:
-                  'https://yjs.sjtu.edu.cn/gsapp/sys/wdkbapp/modules/wdkb/1566868668786.shtml',
+                  'https://yjs.sjtu.edu.cn/gsapp/sys/wdkbapp/*default/index.do?THEME=indigo&EMAP_LANG=zh#/xskcb',
+              loginSystem: AcademicLoginSystem.graduate,
               title: '研究生登录',
             ),
           ),
@@ -101,13 +104,17 @@ class LoginSelectionScreen extends StatelessWidget {
   Future<void> _openLogin(
     BuildContext context, {
     required String initialUrl,
+    required AcademicLoginSystem loginSystem,
     required String title,
   }) async {
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            WebviewLoginScreen(initialUrl: initialUrl, title: title),
+        builder: (context) => WebviewLoginScreen(
+          initialUrl: initialUrl,
+          title: title,
+          loginSystem: loginSystem,
+        ),
       ),
     );
 

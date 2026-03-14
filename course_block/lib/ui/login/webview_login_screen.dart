@@ -1,20 +1,25 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_cookie_manager_plus/webview_cookie_manager_plus.dart'
     as cookie_mgr;
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../core/services/login_session.dart';
 import '../../core/theme/app_theme.dart';
 
 class WebviewLoginScreen extends StatefulWidget {
   const WebviewLoginScreen({
     super.key,
     required this.initialUrl,
+    required this.loginSystem,
     required this.title,
   });
 
   final String initialUrl;
+  final AcademicLoginSystem loginSystem;
   final String title;
 
   @override
@@ -22,8 +27,19 @@ class WebviewLoginScreen extends StatefulWidget {
 }
 
 class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
+  static const String _graduateCookieUrl = 'https://yjs.sjtu.edu.cn/gsapp/';
+  static const String _graduateCurrentTermUrl =
+      'https://yjsxk.sjtu.edu.cn/yjsxkapp/sys/xsxkapp/xsxkHome/loadPublicInfo_index.do';
+  static const String _graduateCourseQueryUrl =
+      'https://yjs.sjtu.edu.cn/gsapp/sys/wdkbapp/modules/xskcb/xsjxrwcx.do';
+  static const String _graduateReferer =
+      'https://yjs.sjtu.edu.cn/gsapp/sys/wdkbapp/*default/index.do?THEME=indigo&EMAP_LANG=zh#/xskcb';
+
   late final WebViewController _controller;
+  final Dio _dio = Dio();
   bool _isLoading = true;
+  bool _isSaving = false;
+  bool _didSave = false;
 
   @override
   void initState() {
@@ -51,11 +67,22 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
             if (!mounted) return;
             setState(() => _isLoading = false);
 
-            if (url.contains('index_initMenu.html') ||
-                url.contains('wdkb') ||
-                url.contains('main.html') ||
-                url.contains('xskbcx_cxXskbcxIndex.html')) {
-              await _trySaveCookies(url);
+            if (_didSave || _isSaving) {
+              return;
+            }
+
+            if (widget.loginSystem == AcademicLoginSystem.undergraduate &&
+                (url.contains('index_initMenu.html') ||
+                    url.contains('main.html') ||
+                    url.contains('xskbcx_cxXskbcxIndex.html'))) {
+              await _trySaveUndergraduateCookies(url);
+            }
+
+            if (widget.loginSystem == AcademicLoginSystem.graduate) {
+              final uri = Uri.tryParse(url);
+              if (uri?.host == 'yjs.sjtu.edu.cn') {
+                await _trySaveGraduateCookies();
+              }
             }
           },
         ),
@@ -66,8 +93,9 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
     });
   }
 
-  Future<void> _trySaveCookies(String url) async {
+  Future<void> _trySaveUndergraduateCookies(String url) async {
     try {
+      _isSaving = true;
       final cookieManager = cookie_mgr.WebviewCookieManager();
       final cookies = await cookieManager.getCookies(url);
 
@@ -76,8 +104,6 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
       final cookieString = cookies
           .map((c) => '${c.name}=${c.value}')
           .join('; ');
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('cookies', cookieString);
 
       String? display;
       for (final cookie in cookies) {
@@ -85,21 +111,181 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
         if (name.contains('user') ||
             name.contains('uid') ||
             name.contains('jaccount')) {
-          display = '${cookie.name}=${cookie.value}';
+          display = cookie.value;
           break;
         }
       }
-      display ??= cookies.first.name;
-      await prefs.setString('user_info', display);
+      display ??= '已登录';
+      await LoginSessionStorage.saveSession(
+        AcademicLoginSystem.undergraduate,
+        cookies: cookieString,
+        userInfo: display,
+      );
 
       if (!mounted) return;
+      _didSave = true;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('登录成功，Cookie 已保存')));
       Navigator.pop(context, true);
     } catch (e) {
       debugPrint('Error getting cookies: $e');
+    } finally {
+      _isSaving = false;
     }
+  }
+
+  Future<void> _trySaveGraduateCookies() async {
+    try {
+      _isSaving = true;
+      final cookieManager = cookie_mgr.WebviewCookieManager();
+      final cookies = await cookieManager.getCookies(_graduateCookieUrl);
+
+      if (cookies.isEmpty) {
+        return;
+      }
+
+      final cookieString = cookies
+          .map((c) => '${c.name}=${c.value}')
+          .join('; ');
+      final userInfo = await _validateGraduateLogin(cookieString);
+      if (userInfo == null || userInfo.trim().isEmpty) {
+        return;
+      }
+
+      await LoginSessionStorage.saveSession(
+        AcademicLoginSystem.graduate,
+        cookies: cookieString,
+        userInfo: userInfo,
+      );
+
+      if (!mounted) return;
+      _didSave = true;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('研究生登录成功，凭据已保存')));
+      Navigator.pop(context, true);
+    } catch (e) {
+      debugPrint('Error validating graduate login: $e');
+    } finally {
+      _isSaving = false;
+    }
+  }
+
+  Future<String?> _validateGraduateLogin(String cookies) async {
+    final currentTerm = await _loadGraduateCurrentTerm();
+    if (currentTerm == null) {
+      return null;
+    }
+
+    final response = await _dio.post<dynamic>(
+      '$_graduateCourseQueryUrl?_=${DateTime.now().millisecondsSinceEpoch}',
+      data: {
+        'XNXQDM': currentTerm,
+        'XH': '',
+        'pageNumber': '1',
+        'pageSize': '1',
+      },
+      options: Options(
+        headers: {
+          'Cookie': cookies,
+          'Referer': _graduateReferer,
+          'Origin': 'https://yjs.sjtu.edu.cn',
+          'User-Agent':
+              'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        },
+        followRedirects: false,
+        responseType: ResponseType.plain,
+        contentType: Headers.formUrlEncodedContentType,
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+
+    if (response.statusCode != 200) {
+      return null;
+    }
+
+    final data = response.data;
+    Map<String, dynamic>? json;
+    if (data is Map<String, dynamic>) {
+      json = data;
+    } else if (data is String) {
+      json = _tryDecodeJson(data);
+    }
+    if (json == null) {
+      return null;
+    }
+
+    final code = json['code']?.toString();
+    if (code != '0') {
+      return null;
+    }
+
+    final datas = json['datas'];
+    if (datas is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final result = datas['xsjxrwcx'];
+    if (result is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final rows = result['rows'];
+    if (rows is List) {
+      for (final item in rows) {
+        if (item is! Map<String, dynamic>) {
+          continue;
+        }
+        final studentId = item['XH']?.toString();
+        final school = item['KKDW_DISPLAY']?.toString();
+        if (studentId != null && studentId.trim().isNotEmpty) {
+          if (school != null && school.trim().isNotEmpty) {
+            return '$studentId · $school';
+          }
+          return studentId;
+        }
+      }
+    }
+
+    return '已登录';
+  }
+
+  Future<String?> _loadGraduateCurrentTerm() async {
+    final response = await _dio.get<dynamic>(
+      _graduateCurrentTermUrl,
+      options: Options(responseType: ResponseType.plain),
+    );
+    if (response.statusCode != 200) {
+      return null;
+    }
+
+    final data = response.data;
+    Map<String, dynamic>? json;
+    if (data is Map<String, dynamic>) {
+      json = data;
+    } else if (data is String) {
+      json = _tryDecodeJson(data);
+    }
+    final lcxx = json?['lcxx'];
+    if (lcxx is! Map<String, dynamic>) {
+      return null;
+    }
+    final code = lcxx['XNXQDM']?.toString();
+    if (code == null || code.trim().isEmpty) {
+      return null;
+    }
+    return code.trim();
+  }
+
+  Map<String, dynamic>? _tryDecodeJson(String value) {
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+    } catch (_) {}
+    return null;
   }
 
   @override

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/schedule.dart';
 import '../../core/providers/course_provider.dart';
+import '../../core/services/course_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../login/login_selection_screen.dart';
 import '../screens/about_screen.dart';
@@ -748,13 +749,18 @@ Future<void> _syncCurrentSchedule(BuildContext context) async {
     return;
   }
 
-  final count = await provider.syncCurrentSchedule();
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(count > 0 ? '已同步 $count 条课程' : '未获取到课程，请检查登录状态或学期信息'),
-    ),
-  );
+  try {
+    final count = await provider.syncCurrentSchedule();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(count > 0 ? '已同步 $count 条课程' : '未获取到课程，请检查登录状态或学期信息'),
+      ),
+    );
+  } on CourseSyncException catch (e) {
+    if (!context.mounted) return;
+    _showSyncError(context, e);
+  }
 }
 
 Future<void> _showManualSyncDialog(BuildContext context) async {
@@ -823,19 +829,30 @@ Future<void> _showManualSyncDialog(BuildContext context) async {
         FilledButton(
           onPressed: () async {
             Navigator.pop(dialogContext);
-            final count = await provider.syncCourses(year, term);
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  count > 0 ? '已同步 $count 条课程' : '未获取到课程，请检查登录状态或学期设置',
+            try {
+              final count = await provider.syncCourses(year, term);
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    count > 0 ? '已同步 $count 条课程' : '未获取到课程，请检查登录状态或学期设置',
+                  ),
                 ),
-              ),
-            );
+              );
+            } on CourseSyncException catch (e) {
+              if (!context.mounted) return;
+              _showSyncError(context, e);
+            }
           },
           child: const Text('同步'),
         ),
       ],
     ),
   );
+}
+
+void _showSyncError(BuildContext context, CourseSyncException error) {
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(error.message)));
 }

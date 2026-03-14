@@ -5,6 +5,7 @@ import '../../core/models/course.dart';
 import '../../core/models/schedule.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/course_service.dart';
+import '../../core/services/login_session.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
@@ -632,23 +633,55 @@ class CourseProvider extends ChangeNotifier {
     return syncCourses(schedule.year, schedule.term);
   }
 
+  Future<List<AcademicLoginSystem>> _resolveSyncSystemOrder() async {
+    final availableSystems = await LoginSessionStorage.loadAvailableSystems();
+    if (availableSystems.isEmpty) {
+      throw const AcademicLoginRequiredException();
+    }
+
+    final activeSystem = await LoginSessionStorage.loadActiveSystem();
+    if (activeSystem != null && availableSystems.contains(activeSystem)) {
+      return [activeSystem];
+    }
+
+    if (availableSystems.length == 1) {
+      return availableSystems;
+    }
+
+    return [
+      if (availableSystems.contains(AcademicLoginSystem.undergraduate))
+        AcademicLoginSystem.undergraduate,
+      if (availableSystems.contains(AcademicLoginSystem.graduate))
+        AcademicLoginSystem.graduate,
+    ];
+  }
+
   Future<int> syncCourses(String year, String term) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      var fetchedCourses = await _courseService.fetchUndergraduateCourses(
-        year,
-        term,
-        courseColorPalette: _courseColorPalette,
-      );
+      final syncSystems = await _resolveSyncSystemOrder();
+      var fetchedCourses = <Course>[];
 
-      if (fetchedCourses.isEmpty) {
-        fetchedCourses = await _courseService.fetchGraduateCourses(
-          year,
-          term,
-          courseColorPalette: _courseColorPalette,
-        );
+      for (final system in syncSystems) {
+        if (system == AcademicLoginSystem.undergraduate) {
+          fetchedCourses = await _courseService.fetchUndergraduateCourses(
+            year,
+            term,
+            courseColorPalette: _courseColorPalette,
+          );
+        } else {
+          fetchedCourses = await _courseService.fetchGraduateCourses(
+            year,
+            term,
+            courseColorPalette: _courseColorPalette,
+          );
+        }
+
+        if (fetchedCourses.isNotEmpty) {
+          break;
+        }
       }
 
       if (fetchedCourses.isEmpty) {
@@ -740,6 +773,9 @@ class CourseProvider extends ChangeNotifier {
       final count = fetchedCourses.length;
       return count;
     } catch (e) {
+      if (e is CourseSyncException) {
+        rethrow;
+      }
       debugPrint('Error syncing courses: $e');
       return 0;
     } finally {
