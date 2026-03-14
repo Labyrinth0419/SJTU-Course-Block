@@ -114,6 +114,12 @@ class CourseProvider extends ChangeNotifier {
   String? _launcherIcon;
   String? get launcherIcon => _launcherIcon;
 
+  static const Set<String> _excludedLauncherIcons = {
+    'ic_launcher',
+    'default',
+    'flutter',
+  };
+
   /// Scan assets/icons/* directory for alternate launcher icons.
   ///
   /// Uses the official AssetManifest API that handles both JSON and binary
@@ -125,14 +131,17 @@ class CourseProvider extends ChangeNotifier {
       for (final key in manifest.listAssets()) {
         if (key.startsWith('assets/icons/') || key.startsWith('assets/icon/')) {
           final iconName = p.basenameWithoutExtension(key);
-          if (iconName == 'ic_launcher') continue; // skip default
+          if (_excludedLauncherIcons.contains(iconName) || iconName.isEmpty) {
+            continue;
+          }
           names.add(iconName);
         }
       }
     } catch (e) {
       debugPrint('Error loading AssetManifest: $e');
     }
-    return names.toList();
+    final availableIcons = names.toList()..sort();
+    return availableIcons;
   }
 
   final CourseService _courseService = CourseService();

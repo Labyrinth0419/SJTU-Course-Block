@@ -37,7 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  Future<void> _showLauncherIconDialog(BuildContext context) async {
+  Future<void> _showLauncherIconDialog() async {
     final provider = context.read<CourseProvider>();
     final current = provider.launcherIcon;
     List<String> icons;
@@ -48,7 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       icons = [];
     }
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     final choice = await showDialog<String?>(
       context: context,
@@ -90,9 +90,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (choice == null) return;
-    await provider.updateAppSetting(
-      'app_icon_choice',
-      choice.isEmpty ? null : choice,
+    final nextIcon = choice.isEmpty ? null : choice;
+    if (nextIcon == current) return;
+    if (!mounted) return;
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final targetLabel = nextIcon ?? '默认图标';
+        return AlertDialog(
+          title: const Text('确认更换启动器图标'),
+          content: Text(
+            '将图标切换为“$targetLabel”后，系统桌面可能不会立即刷新。'
+            '退出并重新打开应用后会完整生效。是否继续？',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('继续更换'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    await provider.updateAppSetting('app_icon_choice', nextIcon);
+    if (!mounted) return;
+    scaffoldMessenger.showSnackBar(
+      const SnackBar(content: Text('启动器图标已更新，退出并重新打开应用后会完整生效')),
     );
   }
 
@@ -166,7 +199,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: provider.launcherIcon == null
                     ? '当前使用默认图标'
                     : '当前使用 ${provider.launcherIcon}',
-                onTap: () => _showLauncherIconDialog(context),
+                onTap: _showLauncherIconDialog,
               ),
             ],
           ),

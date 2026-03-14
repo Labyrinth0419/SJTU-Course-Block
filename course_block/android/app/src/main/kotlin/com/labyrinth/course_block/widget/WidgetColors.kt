@@ -278,6 +278,9 @@ object WidgetColors {
     private fun balanceCourseColorDynamics(color: Int, isDark: Boolean): Int {
         val hsv = FloatArray(3)
         Color.colorToHSV(color, hsv)
+        if (shouldPreserveMutedCourseTone(hsv)) {
+            return color
+        }
 
         val saturationCenter = if (isDark) 0.70f else 0.68f
         val saturationScale = if (isDark) 0.66f else 0.60f
@@ -294,6 +297,9 @@ object WidgetColors {
         )
         return Color.HSVToColor(hsv)
     }
+
+    private fun shouldPreserveMutedCourseTone(hsv: FloatArray): Boolean =
+        hsv[1] <= 0.12f || (hsv[1] <= 0.32f && hsv[2] <= 0.54f)
 
     private fun theme(
         isDark: Boolean,

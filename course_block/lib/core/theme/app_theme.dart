@@ -750,6 +750,9 @@ Color _balanceCourseColorDynamics(
   required Brightness brightness,
 }) {
   final hsv = HSVColor.fromColor(color);
+  if (_shouldPreserveMutedCourseTone(hsv)) {
+    return color;
+  }
   final saturationCenter = brightness == Brightness.dark ? 0.70 : 0.68;
   final saturationScale = brightness == Brightness.dark ? 0.66 : 0.60;
   final valueCenter = brightness == Brightness.dark ? 0.80 : 0.76;
@@ -773,6 +776,13 @@ Color _balanceCourseColorDynamics(
       .withSaturation(balancedSaturation)
       .withValue(balancedValue)
       .toColor();
+}
+
+bool _shouldPreserveMutedCourseTone(HSVColor hsv) {
+  // Keep intentionally muted grays, including virtual-course fills, from
+  // being brightened again during palette balancing.
+  return hsv.saturation <= 0.12 ||
+      (hsv.saturation <= 0.32 && hsv.value <= 0.54);
 }
 
 Color _generateLegacyCoursePaletteColor({
