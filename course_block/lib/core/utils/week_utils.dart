@@ -1,6 +1,69 @@
-
 class WeekUtils {
   static const int MAX_WEEKS = 24; // Assuming 24 weeks max
+
+  /// Extract week expressions like `1-16`, `9-12(单)` from mixed text while
+  /// ignoring unrelated numbers such as class periods.
+  static List<String> extractWeekExpressions(String rawText) {
+    if (rawText.trim().isEmpty) {
+      return const [];
+    }
+
+    var normalized = rawText
+        .replaceAll('（', '(')
+        .replaceAll('）', ')')
+        .replaceAll('，', ',')
+        .replaceAll('、', ',')
+        .replaceAll('；', ',')
+        .replaceAll(';', ',')
+        .replaceAll('至', '-')
+        .replaceAll('—', '-')
+        .replaceAll('–', '-')
+        .replaceAll('～', '-')
+        .replaceAll('~', '-')
+        .replaceAll('单周', '(单)')
+        .replaceAll('双周', '(双)')
+        .replaceAll('周(', '(')
+        .replaceAll(' ', '');
+
+    final cutPoints = [
+      normalized.indexOf('星期'),
+      normalized.indexOf('['),
+    ].where((index) => index >= 0).toList();
+    if (cutPoints.isNotEmpty) {
+      final cutoff = cutPoints.reduce((a, b) => a < b ? a : b);
+      normalized = normalized.substring(0, cutoff);
+    }
+
+    final matches = RegExp(
+      r'(\d{1,2}(?:-\d{1,2})?(?:\((?:单|双)\))?)',
+    ).allMatches(normalized);
+
+    final expressions = <String>[];
+    for (final match in matches) {
+      final token = match.group(1);
+      if (token == null || token.isEmpty) {
+        continue;
+      }
+
+      final cleanToken = token.replaceAll('(单)', '').replaceAll('(双)', '');
+      final parts = cleanToken.split('-');
+      final start = int.tryParse(parts.first);
+      final end = int.tryParse(parts.length > 1 ? parts[1] : parts.first);
+      if (start == null || end == null) {
+        continue;
+      }
+      if (start < 1 || end < 1 || start > MAX_WEEKS || end > MAX_WEEKS) {
+        continue;
+      }
+      if (start > end) {
+        continue;
+      }
+
+      expressions.add(token);
+    }
+
+    return expressions;
+  }
 
   /// Parses a week string like "1-16(双), 3-5" into a binary string of length MAX_WEEKS.
   /// '1' means has course, '0' means no course.

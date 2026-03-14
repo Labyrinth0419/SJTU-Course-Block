@@ -185,7 +185,7 @@ class _FaqScreenState extends State<FaqScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '把常用说明、更新检查和反馈入口集中在一起。',
+                          '常见问题与版本信息。',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),

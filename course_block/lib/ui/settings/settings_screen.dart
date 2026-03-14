@@ -174,12 +174,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          _buildIntroCard(context),
-          const SizedBox(height: 12),
           _buildSectionCard(
             context,
             title: '主题与个性化',
-            subtitle: '这里只保留真正属于应用层的视觉和启动入口。',
             children: [
               _buildThemePicker(context, provider),
               _buildThemeSchemePicker(context, provider),
@@ -199,67 +196,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSectionCard(
             context,
             title: '账号与连接',
-            subtitle: '教务登录是跨课表共享能力，所以放在应用设置。',
             children: [
               _buildActionTile(
                 context,
                 icon: Icons.login,
-                title: _userInfo == null ? '教务系统登录' : '管理教务登录',
+                title: _userInfo == null ? '教务系统登录' : '教务系统账号',
                 subtitle: _userInfo ?? '未登录',
                 onTap: () => _handleLoginAction(context),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _buildSectionCard(
-            context,
-            title: '帮助与支持',
-            subtitle: '更新检查、常见问题和反馈入口集中在这里。',
-            children: [
-              _buildActionTile(
-                context,
-                icon: Icons.help_outline,
-                title: '帮助与反馈',
-                subtitle: 'FAQ、更新检查、反馈入口',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const FaqScreen()),
-                  );
-                },
-              ),
-            ],
-          ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildIntroCard(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '应用设置只处理全局能力',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '课表相关的周数、切换、常用显示和低频工具都已经移到首页右上角的“更多”面板，这里只保留全局能力。主题现在拆成“界面模式 + 页面配色 + 课程色板”三层。',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -278,13 +225,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: Theme.of(
               context,
             ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '每套主题都自带浅色和深色版本，Tokyo Night 会在深色下切到夜色版。',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
           ),
           const SizedBox(height: 10),
           LayoutBuilder(
@@ -379,7 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            '只影响课程卡片，不改页面主题。默认是糖果盒。',
+            '只影响课程卡片，不改页面主题。',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -418,7 +358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildSectionCard(
     BuildContext context, {
     required String title,
-    required String subtitle,
+    String? subtitle,
     required List<Widget> children,
   }) {
     final theme = Theme.of(context);
@@ -441,13 +381,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  if (subtitle != null && subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

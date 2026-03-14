@@ -433,74 +433,252 @@ class ScheduleGrid extends StatelessWidget {
     Course course,
     CourseProvider provider,
   ) {
-    showDialog(
+    final theme = Theme.of(context);
+    final palette = context.appTheme;
+    final accentColor = _getCourseColor(
+      course,
+      _isCourseInWeek(course, currentWeek),
+      palette,
+      provider.courseColorPalette,
+      theme.brightness,
+    );
+
+    showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(course.courseName),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('教师: ${course.teacher}'),
-              Text('教室: ${course.classRoom}'),
-              Text('周次: ${course.startWeek}-${course.endWeek}周'),
-              Text(
-                '时间: ${_getDayName(course.dayOfWeek - 1)} ${course.startNode}-${course.startNode + course.step - 1}节',
-              ),
-            ],
+        final sheetTheme = Theme.of(dialogContext);
+        final isCurrent = _isCourseInWeek(course, currentWeek);
+        final statusTexts = <String>[
+          if (course.isVirtual) '虚拟排课',
+          isCurrent ? '本周上课' : '本周不上课',
+        ];
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 28,
+            vertical: 24,
           ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('删除课程'),
-                    content: const Text('确定要删除这门课程吗？'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('取消'),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 380,
+              maxHeight: MediaQuery.sizeOf(dialogContext).height * 0.66,
+            ),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: palette.floatingSheetSurface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: sheetTheme.dividerColor.withValues(alpha: 0.18),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: palette.floatingSheetShadow,
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  course.courseName,
+                                  style: sheetTheme.textTheme.titleMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        height: 1.2,
+                                        fontSize: 18,
+                                      ),
+                                ),
+                                if (statusTexts.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline_rounded,
+                                        size: 14,
+                                        color: sheetTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Expanded(
+                                        child: Text(
+                                          statusTexts.join(' · '),
+                                          style: sheetTheme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: sheetTheme
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                                fontSize: 12,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            tooltip: '关闭',
+                            visualDensity: VisualDensity.compact,
+                            style: IconButton.styleFrom(
+                              minimumSize: const Size(32, 32),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ],
                       ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('删除'),
+                      const SizedBox(height: 12),
+                      Divider(
+                        color: sheetTheme.dividerColor.withValues(alpha: 0.18),
+                        height: 1,
+                      ),
+                      const SizedBox(height: 10),
+                      _CourseDetailRow(
+                        icon: Icons.schedule_rounded,
+                        label: '时间',
+                        value: _formatCourseTime(course),
+                        iconColor: accentColor,
+                      ),
+                      _CourseDetailRow(
+                        icon: Icons.calendar_today_rounded,
+                        label: '周次',
+                        value: _formatCourseWeekText(course),
+                        iconColor: sheetTheme.colorScheme.primary,
+                      ),
+                      _CourseDetailRow(
+                        icon: Icons.location_on_outlined,
+                        label: '地点',
+                        value: course.classRoom.isEmpty
+                            ? '未填写'
+                            : course.classRoom,
+                        iconColor: sheetTheme.colorScheme.tertiary,
+                      ),
+                      _CourseDetailRow(
+                        icon: Icons.person_outline_rounded,
+                        label: '教师',
+                        value: course.teacher.isEmpty ? '未填写' : course.teacher,
+                        iconColor: sheetTheme.colorScheme.secondary,
+                      ),
+                      if (course.courseId.isNotEmpty)
+                        _CourseDetailRow(
+                          icon: Icons.tag_rounded,
+                          label: '课号',
+                          value: course.courseId,
+                          iconColor: sheetTheme.colorScheme.primary,
+                        ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.tonalIcon(
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop();
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        AddCourseScreen(course: course),
+                                  ),
+                                ).then((value) {
+                                  provider.loadCourses(recalcWeek: false);
+                                });
+                              },
+                              icon: const Icon(Icons.edit_rounded, size: 18),
+                              label: const Text('编辑'),
+                              style: FilledButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                textStyle: sheetTheme.textTheme.labelLarge
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: course.id == null
+                                  ? null
+                                  : () async {
+                                      final confirm = await showDialog<bool>(
+                                        context: dialogContext,
+                                        builder: (dialogContext) => AlertDialog(
+                                          title: const Text('删除课程'),
+                                          content: const Text('确定要删除这门课程吗？'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(
+                                                dialogContext,
+                                                false,
+                                              ),
+                                              child: const Text('取消'),
+                                            ),
+                                            FilledButton(
+                                              onPressed: () => Navigator.pop(
+                                                dialogContext,
+                                                true,
+                                              ),
+                                              child: const Text('删除'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+
+                                      if (confirm != true ||
+                                          course.id == null) {
+                                        return;
+                                      }
+
+                                      await DatabaseHelper.instance
+                                          .deleteCourse(course.id!);
+                                      if (dialogContext.mounted) {
+                                        Navigator.of(dialogContext).pop();
+                                      }
+                                      provider.loadCourses(recalcWeek: false);
+                                    },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: sheetTheme.colorScheme.error,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                textStyle: sheetTheme.textTheme.labelLarge
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 18,
+                              ),
+                              label: const Text('删除'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                );
-
-                if (confirm == true) {
-                  await DatabaseHelper.instance.deleteCourse(course.id!);
-                  if (context.mounted) Navigator.pop(context);
-                  provider.loadCourses(recalcWeek: false);
-                }
-              },
-              child: Text(
-                '删除',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ),
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AddCourseScreen(course: course),
-                  ),
-                ).then((value) {
-                  provider.loadCourses(recalcWeek: false);
-                });
-              },
-              child: const Text('编辑'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('关闭'),
-            ),
-          ],
+          ),
         );
       },
     );
@@ -548,6 +726,25 @@ class ScheduleGrid extends StatelessWidget {
     return days[index % 7];
   }
 
+  String _formatCourseTime(Course course) {
+    final endNode = course.startNode + course.step - 1;
+    return '周${_getDayName(course.dayOfWeek - 1)} ${course.startNode}-$endNode节';
+  }
+
+  String _formatCourseWeekText(Course course) {
+    final base = course.startWeek == course.endWeek
+        ? '第${course.startWeek}周'
+        : '${course.startWeek}-${course.endWeek}周';
+
+    if (course.isOddWeek) {
+      return '$base · 单周';
+    }
+    if (course.isEvenWeek) {
+      return '$base · 双周';
+    }
+    return base;
+  }
+
   /// Render a piece of text with a very thin black stroke (outline) beneath
   /// the normal filled white text.
   Widget _outlinedText(
@@ -586,6 +783,74 @@ class ScheduleGrid extends StatelessWidget {
     return date.year == now.year &&
         date.month == now.month &&
         date.day == now.day;
+  }
+}
+
+class _CourseDetailRow extends StatelessWidget {
+  const _CourseDetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.iconColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.26,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 16),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

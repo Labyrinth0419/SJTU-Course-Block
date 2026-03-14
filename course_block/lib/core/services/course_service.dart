@@ -266,7 +266,7 @@ class CourseService {
     }
 
     return Course(
-      courseId: json['kch_id'] as String? ?? '',
+      courseId: _stringOf(json['kch']) ?? _stringOf(json['kch_id']) ?? '',
       courseName: json['kcmc'] as String? ?? '未知课程',
       teacher: json['xm'] as String? ?? '未知教师',
       classRoom: json['cdmc'] as String? ?? '未知地点',
@@ -461,9 +461,7 @@ class CourseService {
       return '';
     }
 
-    final weekMatches = RegExp(
-      r'((?:[1-9]|1\d|2[0-4])(?:-(?:[1-9]|1\d|2[0-4]))?(?:\((?:单|双)\))?)',
-    ).allMatches(text).map((match) => match.group(1)!).toList();
+    final weekMatches = WeekUtils.extractWeekExpressions(text);
     if (weekMatches.isNotEmpty) {
       return weekMatches.join(',');
     }

@@ -155,7 +155,7 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '课程名称、时间段、周次和显示颜色都在这里一次完成，颜色会跟随全局课程色板切换。',
+                            '设置课程名称、时间和周次。',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                               height: 1.45,

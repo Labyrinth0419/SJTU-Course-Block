@@ -159,7 +159,7 @@ class _AboutScreenState extends State<AboutScreen> {
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Text(
-                'Course Block 面向上海交通大学课表查看、导入、导出和个性化展示场景。当前版本已将首页操作收敛为看课表、加课、导入导出和更多面板，减少设置中的往返跳转。',
+                'Course Block 是一款面向上海交通大学同学的课表工具。你可以在这里同步课表、手动添加或编辑课程、查看每周安排，也可以按自己的习惯调整主题、颜色和显示方式。无论是日常看课、临时补课，还是整理一份更清晰、更顺手的个人课表，它都希望尽量帮你省掉重复操作。',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   height: 1.6,
                   color: theme.colorScheme.onSurfaceVariant,

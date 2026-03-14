@@ -2,12 +2,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:course_block/core/utils/week_utils.dart';
 
 void main() {
+  test('Extract week expressions keeps two-digit week ranges intact', () {
+    expect(WeekUtils.extractWeekExpressions('1-16周'), ['1-16']);
+    expect(WeekUtils.extractWeekExpressions('8-16周'), ['8-16']);
+    expect(WeekUtils.extractWeekExpressions('9-12周'), ['9-12']);
+  });
+
+  test('Extract week expressions ignores class period numbers', () {
+    expect(WeekUtils.extractWeekExpressions('1-16周 星期二[11-12节]工程馆107'), [
+      '1-16',
+    ]);
+    expect(WeekUtils.extractWeekExpressions('8-16周 星期二[11-12节]工程馆107'), [
+      '8-16',
+    ]);
+    expect(WeekUtils.extractWeekExpressions('9-12周 星期二[11-12节]工程馆107'), [
+      '9-12',
+    ]);
+  });
+
   test('Parse week code with ZH string "周"', () {
     String weekStr = "1-16周";
     String code = WeekUtils.parseWeekCode(weekStr);
     expect(code[0], '1'); // Week 1 has course
     expect(code[15], '1'); // Week 16 has course
     expect(code[16], '0'); // Week 17 no course
+  });
+
+  test('Parse week code keeps undergraduate two-digit ranges correct', () {
+    final codeA = WeekUtils.parseWeekCode('8-16周');
+    expect(codeA.indexOf('1') + 1, 8);
+    expect(codeA.lastIndexOf('1') + 1, 16);
+
+    final codeB = WeekUtils.parseWeekCode('9-12周');
+    expect(codeB.indexOf('1') + 1, 9);
+    expect(codeB.lastIndexOf('1') + 1, 12);
   });
 
   test('Parse week code with ZH string "周" and suffix (双)', () {

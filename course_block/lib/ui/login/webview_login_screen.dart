@@ -126,7 +126,7 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
       _didSave = true;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('登录成功，Cookie 已保存')));
+      ).showSnackBar(const SnackBar(content: Text('登录成功，已保存登录信息')));
       Navigator.pop(context, true);
     } catch (e) {
       debugPrint('Error getting cookies: $e');
@@ -163,7 +163,7 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
       _didSave = true;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('研究生登录成功，凭据已保存')));
+      ).showSnackBar(const SnackBar(content: Text('研究生登录成功，已保存登录信息')));
       Navigator.pop(context, true);
     } catch (e) {
       debugPrint('Error validating graduate login: $e');
@@ -336,7 +336,7 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '登录成功后会自动返回并保存凭据。',
+                                '登录成功后会自动返回。',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),

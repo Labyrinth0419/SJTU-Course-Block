@@ -55,7 +55,7 @@ class LoginSelectionScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '选择你的教务入口，登录成功后会自动保存 Cookie。',
+                          '选择教务入口后登录即可。',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                             height: 1.45,
