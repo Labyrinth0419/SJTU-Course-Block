@@ -41,11 +41,11 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
         val theme = WidgetColors.resolve(context, prefs)
         for (widgetId in appWidgetIds) {
             try {
-                val views   = RemoteViews(context.packageName, R.layout.widget_upcoming)
-                val header   = prefs.getString("today_header",   "近日课程") ?: "近日课程"
+                val views = RemoteViews(context.packageName, R.layout.widget_upcoming)
+                val header = prefs.getString("today_header", "近日课程") ?: "近日课程"
                 val subtitle = prefs.getString("today_subtitle", "") ?: ""
                 views.setInt(R.id.widget_root, "setBackgroundResource", theme.backgroundRes)
-                views.setTextViewText(R.id.tv_header,   header)
+                views.setTextViewText(R.id.tv_header, header)
                 views.setTextViewText(R.id.tv_subtitle, subtitle)
                 views.setTextColor(R.id.tv_header, theme.headerText)
                 views.setTextColor(R.id.tv_subtitle, theme.subtitleText)
@@ -57,9 +57,14 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
                 views.setInt(R.id.divider_center, "setBackgroundColor", theme.divider)
                 views.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
 
+                // RemoteViews.addView() appends into the existing container.
+                // Clear dynamic content before rebuilding cards.
+                views.removeAllViews(R.id.col_today_content)
+                views.removeAllViews(R.id.col_tmr_content)
+
                 // ── 解析 upcoming_list ──────────────────────────────────────────────
                 val json = prefs.getString("upcoming_list", "[]") ?: "[]"
-                val arr  = JSONArray(json)
+                val arr = JSONArray(json)
 
                 data class CourseRow(
                     val name: String,
@@ -67,6 +72,7 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
                     val timeRange: String,
                     val color: String,
                 )
+
                 data class Group(val label: String, val courses: MutableList<CourseRow> = mutableListOf())
 
                 val groups = mutableListOf<Group>()
@@ -76,10 +82,10 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
                         "header" -> groups.add(Group(obj.optString("label", "")))
                         "course" -> groups.lastOrNull()?.courses?.add(
                             CourseRow(
-                                obj.optString("name",      "--"),
-                                obj.optString("room",      ""),
+                                obj.optString("name", "--"),
+                                obj.optString("room", ""),
                                 obj.optString("timeRange", ""),
-                                obj.optString("color",     ""),
+                                obj.optString("color", ""),
                             )
                         )
                     }
@@ -87,7 +93,7 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
 
                 // label 以 "Today" 开头 → 今天栏；以 "Tmr" 开头 → 明天栏
                 val todayGroup = groups.find { it.label.startsWith("Today") }
-                val tmrGroup   = groups.find { it.label.startsWith("Tmr") }
+                val tmrGroup = groups.find { it.label.startsWith("Tmr") }
 
                 fun addCards(colId: Int, courses: List<CourseRow>) {
                     if (courses.isEmpty()) {
@@ -101,9 +107,9 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
                         return
                     }
                     for (c in courses) {
-                        val rv    = RemoteViews(context.packageName, R.layout.widget_mini_card)
+                        val rv = RemoteViews(context.packageName, R.layout.widget_mini_card)
                         val color = WidgetColors.forCourse(c.name, theme, c.color)
-                        val info  = listOf(c.room, c.timeRange)
+                        val info = listOf(c.room, c.timeRange)
                             .filter { it.isNotEmpty() }.joinToString(" ")
                         rv.setTextViewText(R.id.mini_name, c.name)
                         rv.setTextViewText(R.id.mini_info, info)
@@ -114,8 +120,8 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
                     }
                 }
 
-                addCards(R.id.col_today, todayGroup?.courses ?: emptyList())
-                addCards(R.id.col_tmr,   tmrGroup?.courses   ?: emptyList())
+                addCards(R.id.col_today_content, todayGroup?.courses ?: emptyList())
+                addCards(R.id.col_tmr_content, tmrGroup?.courses ?: emptyList())
 
                 // 刷新按钮
                 val refreshPi = PendingIntent.getBroadcast(

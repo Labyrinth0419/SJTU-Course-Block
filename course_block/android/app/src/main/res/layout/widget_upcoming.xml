@@ -84,6 +84,13 @@
                 android:paddingBottom="2dp"
             />
 
+            <LinearLayout
+                android:id="@+id/col_today_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+            />
+
         </LinearLayout>
 
         <!-- 纵向分割线 -->
@@ -112,6 +119,13 @@
                 android:textColor="@color/widget_subtitle_text"
                 android:textSize="10sp"
                 android:paddingBottom="2dp"
+            />
+
+            <LinearLayout
+                android:id="@+id/col_tmr_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
             />
 
         </LinearLayout>

@@ -41,11 +41,11 @@ class WeekWidgetProvider : AppWidgetProvider() {
         val theme = WidgetColors.resolve(context, prefs)
         for (widgetId in appWidgetIds) {
             try {
-                val views   = RemoteViews(context.packageName, R.layout.widget_week)
-                val header   = prefs.getString("today_header",   "一周课程") ?: "一周课程"
+                val views = RemoteViews(context.packageName, R.layout.widget_week)
+                val header = prefs.getString("today_header", "一周课程") ?: "一周课程"
                 val subtitle = prefs.getString("today_subtitle", "") ?: ""
                 views.setInt(R.id.widget_root, "setBackgroundResource", theme.backgroundRes)
-                views.setTextViewText(R.id.tv_header,   header)
+                views.setTextViewText(R.id.tv_header, header)
                 views.setTextViewText(R.id.tv_subtitle, subtitle)
                 views.setTextColor(R.id.tv_header, theme.headerText)
                 views.setTextColor(R.id.tv_subtitle, theme.subtitleText)
@@ -58,9 +58,17 @@ class WeekWidgetProvider : AppWidgetProvider() {
                 views.setInt(R.id.divider_v3, "setBackgroundColor", theme.divider)
                 views.setInt(R.id.divider_v4, "setBackgroundColor", theme.divider)
 
+                // RemoteViews.addView() is incremental. Clear old column children first,
+                // otherwise theme updates / manual refresh will append duplicate rows.
+                views.removeAllViews(R.id.col_week_1)
+                views.removeAllViews(R.id.col_week_2)
+                views.removeAllViews(R.id.col_week_3)
+                views.removeAllViews(R.id.col_week_4)
+                views.removeAllViews(R.id.col_week_5)
+
                 // ── 解析 week_list ──────────────────────────────────────────────────────────
                 val json = prefs.getString("week_list", "[]") ?: "[]"
-                val arr  = JSONArray(json)
+                val arr = JSONArray(json)
 
                 data class CourseRow(
                     val name: String,
@@ -68,6 +76,7 @@ class WeekWidgetProvider : AppWidgetProvider() {
                     val timeRange: String,
                     val color: String,
                 )
+
                 data class Group(val label: String, val courses: MutableList<CourseRow> = mutableListOf())
 
                 val groups = mutableListOf<Group>()
@@ -77,10 +86,10 @@ class WeekWidgetProvider : AppWidgetProvider() {
                         "header" -> groups.add(Group(obj.optString("label", "")))
                         "course" -> groups.lastOrNull()?.courses?.add(
                             CourseRow(
-                                obj.optString("name",      "--"),
-                                obj.optString("room",      ""),
+                                obj.optString("name", "--"),
+                                obj.optString("room", ""),
                                 obj.optString("timeRange", ""),
-                                obj.optString("color",     ""),
+                                obj.optString("color", ""),
                             )
                         )
                     }
@@ -109,7 +118,7 @@ class WeekWidgetProvider : AppWidgetProvider() {
 
                     // 课程卡片
                     for (c in group.courses) {
-                        val rv    = RemoteViews(context.packageName, R.layout.widget_mini_card)
+                        val rv = RemoteViews(context.packageName, R.layout.widget_mini_card)
                         val color = WidgetColors.forCourse(c.name, theme, c.color)
                         rv.setTextViewText(R.id.mini_name, c.name)
                         rv.setTextViewText(R.id.mini_info, c.timeRange)
