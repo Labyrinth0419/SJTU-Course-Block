@@ -109,14 +109,17 @@ class _FaqScreenState extends State<FaqScreen> {
   }
 
   final List<_FaqItem> _items = [
-    _FaqItem(header: '如何更新课表？', body: '打开"同步课表"页面，输入学年学期并点击同步即可。也可以手动添加课程。'),
+    _FaqItem(
+      header: '如何更新课表？',
+      body: '点击首页右上角的导入图标，可以从教务系统同步当前学期或其他学期，也可以手动导入 JSON / ICS 文件。',
+    ),
     _FaqItem(
       header: '桌面组件不刷新怎么办？',
       body: '尝试在应用内进入设置界面，然后再次回到首页，这会触发刷新。如果仍无效，可重启设备。',
     ),
     _FaqItem(
       header: '如何备份/恢复数据？',
-      body: '在设置中使用导出功能生成 JSON 文件；使用导入功能可恢复之前备份的课表。',
+      body: '点击首页右上角的导出图标可以生成备份文件；点击导入图标并选择 JSON 文件即可恢复之前备份的课表。',
     ),
   ];
 

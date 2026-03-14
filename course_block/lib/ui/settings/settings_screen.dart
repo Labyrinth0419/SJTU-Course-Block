@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../ui/login/login_selection_screen.dart';
+
 import '../../core/providers/course_provider.dart';
-import 'schedule_management_screen.dart';
+import '../../ui/login/login_selection_screen.dart';
 import '../screens/faq_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -14,10 +14,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _showNonCurrentWeek = false;
-  bool _showGridLines = true;
-  bool _outlineText = false; // new global toggle
-  ThemeMode _themeMode = ThemeMode.system;
   String? _userInfo;
 
   @override
@@ -28,27 +24,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
-      _showNonCurrentWeek = prefs.getBool('show_non_current_week') ?? false;
-      _showGridLines = prefs.getBool('show_grid_lines') ?? true;
-      _outlineText = prefs.getBool('outline_text') ?? false;
       _userInfo = prefs.getString('user_info');
       if (_userInfo == null) {
         final cookies = prefs.getString('cookies');
         if (cookies != null && cookies.isNotEmpty) {
           _userInfo = '已登录';
         }
-      }
-      final mode = prefs.getString('theme_mode');
-      switch (mode) {
-        case 'light':
-          _themeMode = ThemeMode.light;
-          break;
-        case 'dark':
-          _themeMode = ThemeMode.dark;
-          break;
-        default:
-          _themeMode = ThemeMode.system;
       }
     });
   }
@@ -63,283 +46,345 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debugPrint('failed to load icon list: $e');
       icons = [];
     }
+
+    if (!context.mounted) return;
+
     final choice = await showDialog<String?>(
       context: context,
-      builder: (ctx) {
-        String? temp = current;
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text('选择启动器图标'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                RadioListTile<String?>(
-                  title: const Text('默认'),
-                  value: null,
-                  groupValue: temp,
-                  onChanged: (v) {
-                    temp = v;
-                    Navigator.of(ctx).pop(v);
-                  },
-                ),
-                ...icons.map((name) {
-                  Widget iconPreview;
-                  try {
-                    iconPreview = Image.asset(
-                      'assets/icons/$name.png',
-                      width: 24,
-                      height: 24,
-                    );
-                  } catch (_) {
-                    try {
-                      iconPreview = Image.asset(
-                        'assets/icon/$name.png',
-                        width: 24,
-                        height: 24,
-                      );
-                    } catch (_) {
-                      iconPreview = const SizedBox(width: 24, height: 24);
-                    }
-                  }
-                  return RadioListTile<String?>(
-                    title: Row(
-                      children: [
-                        iconPreview,
-                        const SizedBox(width: 8),
-                        Text(name),
-                      ],
-                    ),
-                    value: name,
-                    groupValue: temp,
-                    onChanged: (v) {
-                      temp = v;
-                      Navigator.of(ctx).pop(v);
-                    },
-                  );
-                }),
-                if (icons.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text('未找到可用的自定义图标'),
+          content: SizedBox(
+            width: 360,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildIconOptionTile(
+                    dialogContext,
+                    title: '默认',
+                    selected: current == null,
+                    value: '',
                   ),
-              ],
+                  ...icons.map(
+                    (name) => _buildIconOptionTile(
+                      dialogContext,
+                      title: name,
+                      selected: current == name,
+                      value: name,
+                      preview: _buildLauncherPreview(name),
+                    ),
+                  ),
+                  if (icons.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('未找到可用的自定义图标'),
+                    ),
+                ],
+              ),
             ),
           ),
         );
       },
     );
-    if (choice != null) {
-      final prefs = await SharedPreferences.getInstance();
-      if (choice.isEmpty) {
-        await prefs.remove('app_icon_choice');
-      } else {
-        await prefs.setString('app_icon_choice', choice);
-      }
-      provider.updateSetting('app_icon_choice', choice == '' ? null : choice);
+
+    if (choice == null) return;
+    await provider.updateAppSetting(
+      'app_icon_choice',
+      choice.isEmpty ? null : choice,
+    );
+  }
+
+  Future<void> _handleLoginAction(BuildContext context) async {
+    if (_userInfo == null) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginSelectionScreen()),
+      );
+      await _loadSettings();
+      return;
     }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('注销登录'),
+          content: const Text('确定要清除登录信息吗？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('注销'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('cookies');
+    await prefs.remove('user_info');
+    if (!mounted || !context.mounted) return;
+
+    setState(() {
+      _userInfo = null;
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已注销')));
   }
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<CourseProvider>();
     return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
-      body: Consumer<CourseProvider>(
-        builder: (context, provider, child) {
-          return ListView(
+      appBar: AppBar(title: const Text('应用设置')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          _buildIntroCard(context),
+          const SizedBox(height: 12),
+          _buildSectionCard(
+            context,
+            title: '主题与个性化',
+            subtitle: '这里只保留真正属于应用层的视觉和启动入口。',
             children: [
-              SwitchListTile(
-                title: const Text('显示非本周课程'),
-                subtitle: const Text('开启后将显示非本周的课程（颜色变浅）'),
-                value: _showNonCurrentWeek,
-                onChanged: (value) async {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.setBool('show_non_current_week', value);
-                  setState(() {
-                    _showNonCurrentWeek = value;
-                  });
-                },
-              ),
-              SwitchListTile(
-                title: const Text('显示网格线'),
-                subtitle: const Text('开启后显示课表网格'),
-                value: _showGridLines,
-                onChanged: (value) async {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.setBool('show_grid_lines', value);
-                  context.read<CourseProvider>().updateSetting(
-                    'show_grid_lines',
-                    value,
-                  );
-                  setState(() {
-                    _showGridLines = value;
-                  });
-                },
-              ),
-              SwitchListTile(
-                title: const Text('课程字体描边'),
-                subtitle: const Text('开启后课程名与教室会有黑色细描边'),
-                value: _outlineText,
-                onChanged: (value) async {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.setBool('outline_text', value);
-                  context.read<CourseProvider>().updateSetting(
-                    'outline_text',
-                    value,
-                  );
-                  setState(() {
-                    _outlineText = value;
-                  });
-                },
-              ),
-              const Divider(),
-              const ListTile(title: Text('界面模式'), subtitle: Text('选择应用的色彩主题')),
-              RadioListTile<ThemeMode>(
-                title: const Text('跟随系统'),
-                value: ThemeMode.system,
-                groupValue: _themeMode,
-                onChanged: (mode) async {
-                  if (mode == null) return;
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.setString('theme_mode', 'system');
-                  context.read<CourseProvider>().updateSetting(
-                    'theme_mode',
-                    'system',
-                  );
-                  setState(() {
-                    _themeMode = mode;
-                  });
-                },
-              ),
-              RadioListTile<ThemeMode>(
-                title: const Text('浅色模式'),
-                value: ThemeMode.light,
-                groupValue: _themeMode,
-                onChanged: (mode) async {
-                  if (mode == null) return;
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.setString('theme_mode', 'light');
-                  context.read<CourseProvider>().updateSetting(
-                    'theme_mode',
-                    'light',
-                  );
-                  setState(() {
-                    _themeMode = mode;
-                  });
-                },
-              ),
-              RadioListTile<ThemeMode>(
-                title: const Text('深色模式'),
-                value: ThemeMode.dark,
-                groupValue: _themeMode,
-                onChanged: (mode) async {
-                  if (mode == null) return;
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.setString('theme_mode', 'dark');
-                  context.read<CourseProvider>().updateSetting(
-                    'theme_mode',
-                    'dark',
-                  );
-                  setState(() {
-                    _themeMode = mode;
-                  });
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.schedule),
-                title: const Text('课表管理'),
-                subtitle: Text(provider.currentSchedule?.name ?? '默认课表'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ScheduleManagementScreen(),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.login),
-                title: const Text('教务系统登录'),
-                subtitle: Text(_userInfo ?? '点击登录以获取课表'),
-                onTap: () {
-                  if (_userInfo == null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const LoginSelectionScreen(),
-                      ),
-                    ).then((success) async {
-                      final prefs = await SharedPreferences.getInstance();
-                      setState(() {
-                        _userInfo = prefs.getString('user_info');
-                      });
-                    });
-                  } else {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) {
-                        return AlertDialog(
-                          title: const Text('注销登录'),
-                          content: const Text('确定要清除登录信息吗？'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx),
-                              child: const Text('取消'),
-                            ),
-                            TextButton(
-                              onPressed: () async {
-                                final prefs =
-                                    await SharedPreferences.getInstance();
-                                await prefs.remove('cookies');
-                                await prefs.remove('user_info');
-                                setState(() {
-                                  _userInfo = null;
-                                });
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('已注销')),
-                                  );
-                                }
-                                Navigator.pop(ctx);
-                              },
-                              child: const Text('注销'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.android),
-                title: const Text('启动器图标'),
-                subtitle: Consumer<CourseProvider>(
-                  builder: (context, prov, child) {
-                    if (prov.launcherIcon == null) {
-                      return const Text('默认图标');
-                    }
-                    return Text('自定义：${prov.launcherIcon}');
-                  },
-                ),
+              _buildThemePicker(context, provider),
+              _buildActionTile(
+                context,
+                icon: Icons.android,
+                title: '启动器图标',
+                subtitle: provider.launcherIcon == null
+                    ? '当前使用默认图标'
+                    : '当前使用 ${provider.launcherIcon}',
                 onTap: () => _showLauncherIconDialog(context),
               ),
-              ListTile(
-                leading: const Icon(Icons.help_outline),
-                title: const Text('帮助与反馈'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildSectionCard(
+            context,
+            title: '账号与连接',
+            subtitle: '教务登录是跨课表共享能力，所以放在应用设置。',
+            children: [
+              _buildActionTile(
+                context,
+                icon: Icons.login,
+                title: _userInfo == null ? '教务系统登录' : '管理教务登录',
+                subtitle: _userInfo ?? '未登录',
+                onTap: () => _handleLoginAction(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildSectionCard(
+            context,
+            title: '帮助与支持',
+            subtitle: '更新检查、常见问题和反馈入口集中在这里。',
+            children: [
+              _buildActionTile(
+                context,
+                icon: Icons.help_outline,
+                title: '帮助与反馈',
+                subtitle: 'FAQ、更新检查、反馈入口',
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (ctx) => const FaqScreen()),
+                    MaterialPageRoute(builder: (_) => const FaqScreen()),
                   );
                 },
               ),
-              const Divider(),
             ],
-          );
-        },
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _buildIntroCard(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '应用设置只处理全局能力',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '课表相关的周数、切换、常用显示和低频工具都已经移到首页右上角的“更多”面板，这里只保留全局能力。',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemePicker(BuildContext context, CourseProvider provider) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '界面模式',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment(value: ThemeMode.system, label: Text('跟随系统')),
+              ButtonSegment(value: ThemeMode.light, label: Text('浅色')),
+              ButtonSegment(value: ThemeMode.dark, label: Text('深色')),
+            ],
+            selected: {provider.themeMode},
+            onSelectionChanged: (selection) {
+              final mode = selection.first;
+              final modeValue = switch (mode) {
+                ThemeMode.light => 'light',
+                ThemeMode.dark => 'dark',
+                ThemeMode.system => 'system',
+              };
+              context.read<CourseProvider>().updateAppSetting(
+                'theme_mode',
+                modeValue,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionCard(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required List<Widget> children,
+  }) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        leading: CircleAvatar(
+          backgroundColor: theme.colorScheme.primaryContainer,
+          foregroundColor: theme.colorScheme.onPrimaryContainer,
+          child: Icon(icon),
+        ),
+        title: Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  Widget _buildIconOptionTile(
+    BuildContext context, {
+    required String title,
+    required bool selected,
+    required String value,
+    Widget? preview,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: selected
+            ? theme.colorScheme.secondaryContainer
+            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: ListTile(
+        leading: preview ?? const Icon(Icons.apps),
+        title: Text(title),
+        trailing: selected ? const Icon(Icons.check_circle) : null,
+        onTap: () => Navigator.of(context).pop(value),
+      ),
+    );
+  }
+
+  Widget _buildLauncherPreview(String name) {
+    try {
+      return Image.asset('assets/icons/$name.png', width: 24, height: 24);
+    } catch (_) {
+      try {
+        return Image.asset('assets/icon/$name.png', width: 24, height: 24);
+      } catch (_) {
+        return const SizedBox(width: 24, height: 24);
+      }
+    }
   }
 }
