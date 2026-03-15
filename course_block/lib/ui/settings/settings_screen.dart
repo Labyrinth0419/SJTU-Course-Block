@@ -5,7 +5,6 @@ import '../../core/providers/course_provider.dart';
 import '../../core/services/login_session.dart';
 import '../../core/theme/app_theme.dart';
 import '../../ui/login/login_selection_screen.dart';
-import '../screens/faq_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});

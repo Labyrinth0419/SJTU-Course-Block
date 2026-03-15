@@ -1,5 +1,5 @@
 class WeekUtils {
-  static const int MAX_WEEKS = 24; // Assuming 24 weeks max
+  static const int maxWeeks = 24; // Assuming 24 weeks max
 
   /// Extract week expressions like `1-16`, `9-12(单)` from mixed text while
   /// ignoring unrelated numbers such as class periods.
@@ -52,7 +52,7 @@ class WeekUtils {
       if (start == null || end == null) {
         continue;
       }
-      if (start < 1 || end < 1 || start > MAX_WEEKS || end > MAX_WEEKS) {
+      if (start < 1 || end < 1 || start > maxWeeks || end > maxWeeks) {
         continue;
       }
       if (start > end) {
@@ -65,15 +65,15 @@ class WeekUtils {
     return expressions;
   }
 
-  /// Parses a week string like "1-16(双), 3-5" into a binary string of length MAX_WEEKS.
+  /// Parses a week string like "1-16(双), 3-5" into a binary string of length maxWeeks.
   /// '1' means has course, '0' means no course.
   static String parseWeekCode(String weekStr) {
     if (weekStr.isEmpty) {
-      return '0' * MAX_WEEKS;
+      return '0' * maxWeeks;
     }
 
     final List<String> items = weekStr.split(',');
-    final List<String> codeList = List.generate(MAX_WEEKS, (index) => '0');
+    final List<String> codeList = List.generate(maxWeeks, (index) => '0');
 
     for (String rawItem in items) {
       if (rawItem.trim().isEmpty) continue;
@@ -111,7 +111,7 @@ class WeekUtils {
       if (isEven && start % 2 != 0) start++;
 
       for (int i = start; i <= end; i += step) {
-        if (i > 0 && i <= MAX_WEEKS) {
+        if (i > 0 && i <= maxWeeks) {
           codeList[i - 1] = '1';
         }
       }

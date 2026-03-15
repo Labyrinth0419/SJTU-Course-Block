@@ -251,15 +251,6 @@ class _HomeHeader extends StatelessWidget {
                 ),
               ),
               PopupMenuItem(
-                value: ImportMenuAction.login,
-                child: _PopupActionRow(
-                  icon: Icons.link_rounded,
-                  label: '登录教务系统',
-                  iconColor: theme.colorScheme.secondary,
-                  containerColor: theme.colorScheme.secondaryContainer,
-                ),
-              ),
-              PopupMenuItem(
                 value: ImportMenuAction.importJson,
                 child: _PopupActionRow(
                   icon: Icons.file_present_rounded,

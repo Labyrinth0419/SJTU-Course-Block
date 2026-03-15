@@ -87,7 +87,7 @@ class LoginSelectionScreen extends StatelessWidget {
             icon: Icons.auto_stories_rounded,
             color: theme.colorScheme.secondaryContainer,
             title: '研究生教务系统',
-            subtitle: '适用于研究生当前学期课表同步',
+            subtitle: '适用于研究生课表同步',
             onTap: () => _openLogin(
               context,
               initialUrl:

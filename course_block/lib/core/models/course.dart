@@ -16,7 +16,7 @@ class Course {
   final String color; // Random color for display
   final bool isVirtual;
 
-  static const List<String> COLORS = [
+  static const List<String> colors = [
     '#FF758F', // Pink
     '#9B9BFF', // Periwinkle Blue
     '#4ADBC8', // Turquoise

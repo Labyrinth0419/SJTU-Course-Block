@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/models/course_operation_report.dart';
 import '../../core/models/schedule.dart';
 import '../../core/providers/course_provider.dart';
 import '../../core/services/course_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../login/login_selection_screen.dart';
 import '../screens/about_screen.dart';
 import '../screens/faq_screen.dart';
 import 'schedule_settings_screen.dart';
@@ -16,13 +16,7 @@ import 'settings_screen.dart';
 
 const MethodChannel _fileChannel = MethodChannel('course_block/file');
 
-enum ImportMenuAction {
-  syncCurrent,
-  syncOtherTerm,
-  login,
-  importJson,
-  importIcs,
-}
+enum ImportMenuAction { syncCurrent, syncOtherTerm, importJson, importIcs }
 
 enum ExportMenuAction { exportJson, exportIcs, shareIcs, importSystemCalendar }
 
@@ -36,11 +30,6 @@ Future<void> handleImportMenuAction(
       break;
     case ImportMenuAction.syncOtherTerm:
       await _showManualSyncDialog(context);
-      break;
-    case ImportMenuAction.login:
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const LoginSelectionScreen()));
       break;
     case ImportMenuAction.importJson:
       await _pickAndImport(
@@ -729,17 +718,15 @@ Future<void> _pickAndImport(
   BuildContext context, {
   required String label,
   required List<String> extensions,
-  required Future<int> Function(String path) importer,
+  required Future<CourseImportReport> Function(String path) importer,
 }) async {
   final typeGroup = fs.XTypeGroup(label: label, extensions: extensions);
   final file = await fs.openFile(acceptedTypeGroups: [typeGroup]);
   if (file == null) return;
 
-  final count = await importer(file.path);
+  final report = await importer(file.path);
   if (!context.mounted) return;
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text('已导入 $count 条课程')));
+  await _showImportReport(context, report);
 }
 
 Future<void> _syncCurrentSchedule(BuildContext context) async {
@@ -750,16 +737,12 @@ Future<void> _syncCurrentSchedule(BuildContext context) async {
   }
 
   try {
-    final count = await provider.syncCurrentSchedule();
+    final report = await provider.syncCurrentSchedule();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(count > 0 ? '已同步 $count 条课程' : '未获取到课程，请检查登录状态或学期信息'),
-      ),
-    );
+    await _showSyncReport(context, report);
   } on CourseSyncException catch (e) {
     if (!context.mounted) return;
-    _showSyncError(context, e);
+    await _showSyncError(context, e);
   }
 }
 
@@ -830,18 +813,12 @@ Future<void> _showManualSyncDialog(BuildContext context) async {
           onPressed: () async {
             Navigator.pop(dialogContext);
             try {
-              final count = await provider.syncCourses(year, term);
+              final report = await provider.syncCourses(year, term);
               if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    count > 0 ? '已同步 $count 条课程' : '未获取到课程，请检查登录状态或学期设置',
-                  ),
-                ),
-              );
+              await _showSyncReport(context, report);
             } on CourseSyncException catch (e) {
               if (!context.mounted) return;
-              _showSyncError(context, e);
+              await _showSyncError(context, e);
             }
           },
           child: const Text('同步'),
@@ -851,8 +828,251 @@ Future<void> _showManualSyncDialog(BuildContext context) async {
   );
 }
 
-void _showSyncError(BuildContext context, CourseSyncException error) {
-  ScaffoldMessenger.of(
+Future<void> _showImportReport(
+  BuildContext context,
+  CourseImportReport report,
+) async {
+  await _showOperationReportDialog(
     context,
-  ).showSnackBar(SnackBar(content: Text(error.message)));
+    title: report.added > 0
+        ? '导入完成'
+        : report.failed > 0
+        ? '导入未完成'
+        : '未导入课程',
+    subtitle: '来源：${report.sourceLabel}',
+    stats: [
+      _OperationStatItem(label: '新增', value: report.added),
+      _OperationStatItem(label: '失败', value: report.failed),
+    ],
+    notes: report.notes,
+    failures: report.failures,
+  );
+}
+
+Future<void> _showSyncReport(
+  BuildContext context,
+  CourseSyncReport report,
+) async {
+  await _showOperationReportDialog(
+    context,
+    title: report.changed > 0
+        ? '同步完成'
+        : report.skipped > 0 && !report.hasFailures
+        ? '课表已是最新'
+        : report.hasFailures
+        ? '同步未完成'
+        : '未同步到课程',
+    subtitle: '${report.termLabel} · ${report.sourceLabel}',
+    stats: [
+      _OperationStatItem(label: '新增', value: report.added),
+      _OperationStatItem(label: '更新', value: report.updated),
+      _OperationStatItem(label: '跳过', value: report.skipped),
+      _OperationStatItem(label: '失败', value: report.failed),
+    ],
+    notes: [if (report.isEmpty) '所选学期暂无可同步课程。', ...report.notes],
+    failures: report.failures,
+  );
+}
+
+Future<void> _showOperationReportDialog(
+  BuildContext context, {
+  required String title,
+  required String subtitle,
+  required List<_OperationStatItem> stats,
+  required List<String> notes,
+  required List<CourseOperationFailure> failures,
+}) async {
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      final theme = Theme.of(dialogContext);
+      final limitedFailures = failures.take(4).toList();
+
+      return AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final stat in stats) _OperationStatCard(item: stat),
+                  ],
+                ),
+                if (notes.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    '说明',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final note in notes)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        '• $note',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                ],
+                if (limitedFailures.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    '未完成的项目',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final failure in limitedFailures)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.38),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            failure.label,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            failure.reason,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (failures.length > limitedFailures.length)
+                    Text(
+                      '其余 ${failures.length - limitedFailures.length} 条未在此展开。',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('知道了'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Future<void> _showSyncError(
+  BuildContext context,
+  CourseSyncException error,
+) async {
+  final allowOpenSettings =
+      error is AcademicLoginRequiredException ||
+      error is GraduateLoginRequiredException;
+  final title = switch (error) {
+    AcademicLoginRequiredException() => '请先登录教务系统',
+    GraduateLoginRequiredException() => '研究生登录已失效',
+    GraduateScheduleParsingPendingException() => '研究生课表暂未完全适配',
+    _ => '同步失败',
+  };
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: Text(error.message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('关闭'),
+        ),
+        if (allowOpenSettings)
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+            },
+            child: const Text('前往应用设置'),
+          ),
+      ],
+    ),
+  );
+}
+
+class _OperationStatItem {
+  const _OperationStatItem({required this.label, required this.value});
+
+  final String label;
+  final int value;
+}
+
+class _OperationStatCard extends StatelessWidget {
+  const _OperationStatCard({required this.item});
+
+  final _OperationStatItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: 72,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.42,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${item.value}',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            item.label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
