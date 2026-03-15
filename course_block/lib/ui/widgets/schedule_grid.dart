@@ -1,168 +1,250 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-
-import 'dart:io';
 
 import '../../core/db/database_helper.dart';
 import '../../core/models/course.dart';
-import '../../core/providers/course_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/time_slots.dart';
 import '../course/add_course_screen.dart';
 
 class ScheduleGrid extends StatelessWidget {
-  final List<Course> courses;
-  final int currentWeek;
-  final DateTime? startDate;
-
   const ScheduleGrid({
     super.key,
     required this.courses,
     required this.currentWeek,
+    required this.totalWeeks,
+    required this.maxDailyClasses,
+    required this.showGridLines,
+    required this.showNonCurrentWeek,
+    required this.showSaturday,
+    required this.showSunday,
+    required this.outlineText,
+    required this.gridHeight,
+    required this.cornerRadius,
+    required this.courseColorPalette,
     this.startDate,
+    required this.onRefreshRequested,
   });
+
+  final List<Course> courses;
+  final int currentWeek;
+  final int totalWeeks;
+  final int maxDailyClasses;
+  final bool showGridLines;
+  final bool showNonCurrentWeek;
+  final bool showSaturday;
+  final bool showSunday;
+  final bool outlineText;
+  final double gridHeight;
+  final double cornerRadius;
+  final AppCourseColorPalette courseColorPalette;
+  final DateTime? startDate;
+  final Future<void> Function() onRefreshRequested;
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<CourseProvider>();
     final theme = Theme.of(context);
     final palette = context.appTheme;
-    final showGridLines = provider.showGridLines;
-    final showNonCurrentWeek = provider.showNonCurrentWeek;
     final brightness = theme.brightness;
-    final backgroundColor =
-        (brightness == Brightness.dark
-            ? provider.backgroundColorDark
-            : provider.backgroundColorLight) ??
-        theme.scaffoldBackgroundColor;
-    final backgroundImagePath = provider.backgroundImagePath;
-    final backgroundImageOpacity = provider.backgroundImageOpacity;
-    final gridHeight = provider.gridHeight;
-    final cornerRadius = provider.cornerRadius;
 
-    final showWeekend = provider.showSaturday || provider.showSunday;
+    final showWeekend = showSaturday || showSunday;
     final daysToShow = showWeekend ? 7 : 5;
 
     final DateTime viewStartDate = (startDate ?? DateTime.now()).add(
       Duration(days: (currentWeek - 1) * 7),
     );
 
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      body: Container(
-        decoration:
-            backgroundImagePath != null && backgroundImagePath.isNotEmpty
-            ? BoxDecoration(
-                image: DecorationImage(
-                  image: FileImage(File(backgroundImagePath)),
-                  fit: BoxFit.cover,
-                  colorFilter: ColorFilter.mode(
-                    palette.backgroundImageOverlay.withValues(
-                      alpha: backgroundImageOpacity,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double timeColumnWidth = 30.0;
+        const double headerHeight = 60.0;
+        final double rowHeight = gridHeight;
+        final int classCount = maxDailyClasses;
+
+        final double availableWidth = constraints.maxWidth - timeColumnWidth;
+        final double dayColumnWidth = availableWidth / daysToShow;
+        final double weekendColumnWidth = dayColumnWidth;
+
+        final double bodyHeight = classCount * rowHeight;
+
+        final List<Course> candidates = courses.where((course) {
+          if (!_isCourseInWeek(course, currentWeek) && !showNonCurrentWeek) {
+            return false;
+          }
+          if (course.dayOfWeek > 5 && !showWeekend) return false;
+          if (course.dayOfWeek == 6 && !showSaturday) return false;
+          if (course.dayOfWeek == 7 && !showSunday) return false;
+          if (course.dayOfWeek - 1 >= daysToShow) return false;
+          return true;
+        }).toList();
+
+        final List<Course> displayCourses = [];
+        bool overlaps(Course a, Course b) {
+          return a.dayOfWeek == b.dayOfWeek &&
+              !(a.startNode + a.step <= b.startNode ||
+                  b.startNode + b.step <= a.startNode);
+        }
+
+        for (final course in candidates) {
+          if (_isCourseInWeek(course, currentWeek) && !course.isVirtual) {
+            displayCourses.add(course);
+          }
+        }
+        for (final course in candidates) {
+          if (_isCourseInWeek(course, currentWeek) && course.isVirtual) {
+            final conflict = displayCourses.any(
+              (other) => overlaps(course, other),
+            );
+            if (!conflict) {
+              displayCourses.add(course);
+            }
+          }
+        }
+        for (final course in candidates) {
+          if (!_isCourseInWeek(course, currentWeek)) {
+            final conflictWithCurrent = displayCourses.any(
+              (other) =>
+                  _isCourseInWeek(other, currentWeek) &&
+                  overlaps(course, other),
+            );
+            if (!conflictWithCurrent) {
+              displayCourses.add(course);
+            }
+          }
+        }
+
+        final Map<Course, int> courseIndex = {};
+        final Map<Course, int> courseTotal = {};
+        for (int day = 1; day <= daysToShow; day++) {
+          final daily = displayCourses
+              .where((course) => course.dayOfWeek == day)
+              .toList();
+          if (daily.isEmpty) continue;
+          daily.sort((a, b) => a.startNode.compareTo(b.startNode));
+          final groups = <List<Course>>[];
+          for (final course in daily) {
+            var placed = false;
+            for (final group in groups) {
+              final overlap = group.any(
+                (other) =>
+                    !(course.startNode + course.step <= other.startNode ||
+                        other.startNode + other.step <= course.startNode),
+              );
+              if (overlap) {
+                group.add(course);
+                placed = true;
+                break;
+              }
+            }
+            if (!placed) {
+              groups.add([course]);
+            }
+          }
+          for (final group in groups) {
+            final count = group.length;
+            for (int index = 0; index < count; index++) {
+              courseIndex[group[index]] = index;
+              courseTotal[group[index]] = count;
+            }
+          }
+        }
+
+        return Column(
+          children: [
+            SizedBox(
+              height: headerHeight,
+              child: Stack(
+                children: [
+                  CustomPaint(
+                    size: Size(constraints.maxWidth, headerHeight),
+                    painter: GridPainter(
+                      timeColumnWidth: timeColumnWidth,
+                      dayColumnWidth: dayColumnWidth,
+                      weekendColumnWidth: weekendColumnWidth,
+                      rowHeight: rowHeight,
+                      daysToShow: daysToShow,
+                      showGridLines: showGridLines,
+                      classCount: 0,
+                      lineColor: palette.gridLineColor,
+                      drawRows: false,
+                      drawBottomBorder: true,
                     ),
-                    BlendMode.dstATop,
                   ),
-                ),
-              )
-            : null,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            const double timeColumnWidth = 30.0;
-            const double headerHeight = 60.0;
-            final double rowHeight = gridHeight;
-            final int classCount = provider.maxDailyClasses;
-
-            final double availableWidth =
-                constraints.maxWidth - timeColumnWidth;
-            final double dayColumnWidth = availableWidth / daysToShow;
-            final double weekendColumnWidth = dayColumnWidth;
-
-            final double bodyHeight = classCount * rowHeight;
-
-            final List<Course> candidates = courses.where((course) {
-              if (!_isCourseInWeek(course, currentWeek) &&
-                  !showNonCurrentWeek) {
-                return false;
-              }
-              if (course.dayOfWeek > 5 && !showWeekend) return false;
-              if (course.dayOfWeek == 6 && !provider.showSaturday) return false;
-              if (course.dayOfWeek == 7 && !provider.showSunday) return false;
-              if (course.dayOfWeek - 1 >= daysToShow) return false;
-              return true;
-            }).toList();
-
-            final List<Course> displayCourses = [];
-            bool overlaps(Course a, Course b) {
-              return a.dayOfWeek == b.dayOfWeek &&
-                  !(a.startNode + a.step <= b.startNode ||
-                      b.startNode + b.step <= a.startNode);
-            }
-
-            for (var c in candidates) {
-              if (_isCourseInWeek(c, currentWeek) && !c.isVirtual) {
-                displayCourses.add(c);
-              }
-            }
-            for (var c in candidates) {
-              if (_isCourseInWeek(c, currentWeek) && c.isVirtual) {
-                bool conflict = displayCourses.any(
-                  (other) => overlaps(c, other),
-                );
-                if (!conflict) displayCourses.add(c);
-              }
-            }
-            for (var c in candidates) {
-              if (!_isCourseInWeek(c, currentWeek)) {
-                bool conflictWithCurrent = displayCourses.any(
-                  (other) =>
-                      _isCourseInWeek(other, currentWeek) && overlaps(c, other),
-                );
-                if (!conflictWithCurrent) displayCourses.add(c);
-              }
-            }
-
-            final Map<Course, int> courseIndex = {};
-            final Map<Course, int> courseTotal = {};
-            for (int day = 1; day <= daysToShow; day++) {
-              final daily = displayCourses
-                  .where((c) => c.dayOfWeek == day)
-                  .toList();
-              if (daily.isEmpty) continue;
-              daily.sort((a, b) => a.startNode.compareTo(b.startNode));
-              List<List<Course>> groups = [];
-              for (var course in daily) {
-                bool placed = false;
-                for (var group in groups) {
-                  bool ov = group.any(
-                    (c) =>
-                        !(course.startNode + course.step <= c.startNode ||
-                            c.startNode + c.step <= course.startNode),
-                  );
-                  if (ov) {
-                    group.add(course);
-                    placed = true;
-                    break;
-                  }
-                }
-                if (!placed) groups.add([course]);
-              }
-              for (var group in groups) {
-                int cnt = group.length;
-                for (int i = 0; i < cnt; i++) {
-                  courseIndex[group[i]] = i;
-                  courseTotal[group[i]] = cnt;
-                }
-              }
-            }
-
-            return Column(
-              children: [
-                SizedBox(
-                  height: headerHeight,
+                  for (int i = 0; i < daysToShow; i++)
+                    Positioned(
+                      top: 0,
+                      left: timeColumnWidth + (i * dayColumnWidth),
+                      width: dayColumnWidth,
+                      height: headerHeight,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _getDayName(i),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            Builder(
+                              builder: (ctx) {
+                                final date = viewStartDate.add(
+                                  Duration(days: i),
+                                );
+                                var status = '';
+                                final termStartDate = startDate;
+                                if (termStartDate != null) {
+                                  if (date.isBefore(termStartDate)) {
+                                    status = '(学期未开始)';
+                                  } else if (date.isAfter(
+                                    termStartDate.add(
+                                      Duration(days: totalWeeks * 7 - 1),
+                                    ),
+                                  )) {
+                                    status = '(学期已结束)';
+                                  }
+                                }
+                                return Column(
+                                  children: [
+                                    Text(
+                                      '${date.month}/${date.day}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: _isToday(date)
+                                            ? palette.gridTodayText
+                                            : palette.gridMinorText,
+                                        fontWeight: _isToday(date)
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                      ),
+                                    ),
+                                    if (status.isNotEmpty)
+                                      Text(
+                                        status,
+                                        style: TextStyle(
+                                          fontSize: 8,
+                                          color: palette.gridOutOfTermText,
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                child: SizedBox(
+                  height: bodyHeight,
                   child: Stack(
                     children: [
                       CustomPaint(
-                        size: Size(constraints.maxWidth, headerHeight),
+                        size: Size(constraints.maxWidth, bodyHeight),
                         painter: GridPainter(
                           timeColumnWidth: timeColumnWidth,
                           dayColumnWidth: dayColumnWidth,
@@ -170,276 +252,171 @@ class ScheduleGrid extends StatelessWidget {
                           rowHeight: rowHeight,
                           daysToShow: daysToShow,
                           showGridLines: showGridLines,
-                          classCount: 0,
+                          classCount: classCount,
                           lineColor: palette.gridLineColor,
-                          drawRows: false,
-                          drawBottomBorder: true,
+                          drawRows: true,
+                          drawBottomBorder: false,
                         ),
                       ),
-                      for (int i = 0; i < daysToShow; i++)
+                      for (int i = 0; i < classCount; i++)
                         Positioned(
-                          top: 0,
-                          left: timeColumnWidth + (i * dayColumnWidth),
-                          width: dayColumnWidth,
-                          height: headerHeight,
+                          top: i * rowHeight,
+                          left: 0,
+                          width: timeColumnWidth,
+                          height: rowHeight,
                           child: Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  _getDayName(i),
+                                  '${i + 1}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
+                                    fontSize: 12,
                                     color: theme.colorScheme.onSurface,
                                   ),
                                 ),
-                                Builder(
-                                  builder: (ctx) {
-                                    final date = viewStartDate.add(
-                                      Duration(days: i),
-                                    );
-                                    String status = '';
-                                    final start =
-                                        startDate ??
-                                        provider.currentSchedule?.startDate;
-                                    final len = provider.totalWeeks;
-                                    if (start != null) {
-                                      if (date.isBefore(start)) {
-                                        status = '(学期未开始)';
-                                      } else if (date.isAfter(
-                                        start.add(Duration(days: len * 7 - 1)),
-                                      )) {
-                                        status = '(学期已结束)';
-                                      }
-                                    }
-                                    return Column(
-                                      children: [
-                                        Text(
-                                          "${date.month}/${date.day}",
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: _isToday(date)
-                                                ? palette.gridTodayText
-                                                : palette.gridMinorText,
-                                            fontWeight: _isToday(date)
-                                                ? FontWeight.bold
-                                                : FontWeight.normal,
-                                          ),
-                                        ),
-                                        if (status.isNotEmpty)
-                                          Text(
-                                            status,
-                                            style: TextStyle(
-                                              fontSize: 8,
-                                              color: palette.gridOutOfTermText,
-                                            ),
-                                          ),
-                                      ],
-                                    );
-                                  },
+                                Text(
+                                  kClassStartTimes[i],
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: palette.gridMinorText,
+                                  ),
+                                ),
+                                Text(
+                                  kClassEndTimes[i],
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: palette.gridMinorText,
+                                  ),
                                 ),
                               ],
+                            ),
+                          ),
+                        ),
+                      for (final course in displayCourses)
+                        Positioned(
+                          top: ((course.startNode - 1) * rowHeight) + 1,
+                          left:
+                              timeColumnWidth +
+                              (course.dayOfWeek - 1) * dayColumnWidth +
+                              1 +
+                              ((courseIndex[course] ?? 0) *
+                                  ((dayColumnWidth - 2) /
+                                      (courseTotal[course] ?? 1))),
+                          width:
+                              ((dayColumnWidth - 2) /
+                                  (courseTotal[course] ?? 1)) -
+                              2,
+                          height: course.step * rowHeight - 2,
+                          child: GestureDetector(
+                            onTap: () => _showCourseDetail(context, course),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: _getCourseColor(
+                                  course,
+                                  _isCourseInWeek(course, currentWeek),
+                                  palette,
+                                  courseColorPalette,
+                                  brightness,
+                                ),
+                                borderRadius: BorderRadius.circular(
+                                  cornerRadius,
+                                ),
+                              ),
+                              padding: const EdgeInsets.all(2.0),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  outlineText
+                                      ? _outlinedText(
+                                          course.courseName,
+                                          baseStyle: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          maxLines: 4,
+                                          outlineColor: palette.courseOutline,
+                                        )
+                                      : Text(
+                                          course.courseName,
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            shadows: [
+                                              Shadow(
+                                                offset: const Offset(0, 1),
+                                                blurRadius: 2,
+                                                color: palette.courseTextShadow,
+                                              ),
+                                            ],
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 4,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                  outlineText
+                                      ? _outlinedText(
+                                          '@${course.classRoom}',
+                                          baseStyle: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9,
+                                          ),
+                                          maxLines: 3,
+                                          outlineColor: palette.courseOutline,
+                                        )
+                                      : Text(
+                                          '@${course.classRoom}',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9,
+                                            shadows: [
+                                              Shadow(
+                                                offset: const Offset(0, 1),
+                                                blurRadius: 2,
+                                                color: palette.courseTextShadow,
+                                              ),
+                                            ],
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                  if (!_isCourseInWeek(course, currentWeek))
+                                    Text(
+                                      '(非本周)',
+                                      style: TextStyle(
+                                        color: palette.nonCurrentCourseLabel,
+                                        fontSize: 9,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                     ],
                   ),
                 ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: SizedBox(
-                      height: bodyHeight,
-                      child: Stack(
-                        children: [
-                          CustomPaint(
-                            size: Size(constraints.maxWidth, bodyHeight),
-                            painter: GridPainter(
-                              timeColumnWidth: timeColumnWidth,
-                              dayColumnWidth: dayColumnWidth,
-                              weekendColumnWidth: weekendColumnWidth,
-                              rowHeight: rowHeight,
-                              daysToShow: daysToShow,
-                              showGridLines: showGridLines,
-                              classCount: classCount,
-                              lineColor: palette.gridLineColor,
-                              drawRows: true,
-                              drawBottomBorder: false,
-                            ),
-                          ),
-                          for (int i = 0; i < classCount; i++)
-                            Positioned(
-                              top: i * rowHeight,
-                              left: 0,
-                              width: timeColumnWidth,
-                              height: rowHeight,
-                              child: Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      '${i + 1}',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                        color: theme.colorScheme.onSurface,
-                                      ),
-                                    ),
-                                    Text(
-                                      kClassStartTimes[i],
-                                      style: TextStyle(
-                                        fontSize: 8,
-                                        color: palette.gridMinorText,
-                                      ),
-                                    ),
-                                    Text(
-                                      kClassEndTimes[i],
-                                      style: TextStyle(
-                                        fontSize: 8,
-                                        color: palette.gridMinorText,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          for (var course in displayCourses)
-                            Positioned(
-                              top: ((course.startNode - 1) * rowHeight) + 1,
-                              left:
-                                  timeColumnWidth +
-                                  (course.dayOfWeek - 1) * dayColumnWidth +
-                                  1 +
-                                  ((courseIndex[course] ?? 0) *
-                                      ((dayColumnWidth - 2) /
-                                          (courseTotal[course] ?? 1))),
-                              width:
-                                  ((dayColumnWidth - 2) /
-                                      (courseTotal[course] ?? 1)) -
-                                  2,
-                              height: course.step * rowHeight - 2,
-                              child: GestureDetector(
-                                onTap: () => _showCourseDetail(
-                                  context,
-                                  course,
-                                  provider,
-                                ),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: _getCourseColor(
-                                      course,
-                                      _isCourseInWeek(course, currentWeek),
-                                      palette,
-                                      provider.courseColorPalette,
-                                      brightness,
-                                    ),
-                                    borderRadius: BorderRadius.circular(
-                                      cornerRadius,
-                                    ),
-                                  ),
-                                  padding: const EdgeInsets.all(2.0),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      provider.outlineText
-                                          ? _outlinedText(
-                                              course.courseName,
-                                              baseStyle: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                              maxLines: 4,
-                                              outlineColor:
-                                                  palette.courseOutline,
-                                            )
-                                          : Text(
-                                              course.courseName,
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                shadows: [
-                                                  Shadow(
-                                                    offset: Offset(0, 1),
-                                                    blurRadius: 2,
-                                                    color: palette
-                                                        .courseTextShadow,
-                                                  ),
-                                                ],
-                                              ),
-                                              textAlign: TextAlign.center,
-                                              maxLines: 4,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                      provider.outlineText
-                                          ? _outlinedText(
-                                              '@${course.classRoom}',
-                                              baseStyle: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 9,
-                                              ),
-                                              maxLines: 3,
-                                              outlineColor:
-                                                  palette.courseOutline,
-                                            )
-                                          : Text(
-                                              '@${course.classRoom}',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 9,
-                                                shadows: [
-                                                  Shadow(
-                                                    offset: Offset(0, 1),
-                                                    blurRadius: 2,
-                                                    color: palette
-                                                        .courseTextShadow,
-                                                  ),
-                                                ],
-                                              ),
-                                              textAlign: TextAlign.center,
-                                              maxLines: 3,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                      if (!_isCourseInWeek(course, currentWeek))
-                                        Text(
-                                          '(非本周)',
-                                          style: TextStyle(
-                                            color:
-                                                palette.nonCurrentCourseLabel,
-                                            fontSize: 9,
-                                            fontStyle: FontStyle.italic,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  void _showCourseDetail(
-    BuildContext context,
-    Course course,
-    CourseProvider provider,
-  ) {
+  void _showCourseDetail(BuildContext context, Course course) {
     final theme = Theme.of(context);
     final palette = context.appTheme;
     final accentColor = _getCourseColor(
       course,
       _isCourseInWeek(course, currentWeek),
       palette,
-      provider.courseColorPalette,
+      courseColorPalette,
       theme.brightness,
     );
 
@@ -597,9 +574,7 @@ class ScheduleGrid extends StatelessWidget {
                                     builder: (context) =>
                                         AddCourseScreen(course: course),
                                   ),
-                                ).then((value) {
-                                  provider.loadCourses(recalcWeek: false);
-                                });
+                                ).then((_) => onRefreshRequested());
                               },
                               icon: const Icon(Icons.edit_rounded, size: 18),
                               label: const Text('编辑'),
@@ -653,7 +628,7 @@ class ScheduleGrid extends StatelessWidget {
                                       if (dialogContext.mounted) {
                                         Navigator.of(dialogContext).pop();
                                       }
-                                      provider.loadCourses(recalcWeek: false);
+                                      await onRefreshRequested();
                                     },
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: sheetTheme.colorScheme.error,

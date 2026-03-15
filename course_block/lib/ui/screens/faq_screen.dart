@@ -11,6 +11,8 @@ const _releasesUrl =
     'https://github.com/Labyrinth0419/SJTU-Course-Block/releases';
 const _apiUrl =
     'https://api.github.com/repos/Labyrinth0419/SJTU-Course-Block/releases/latest';
+const _issuesUrl =
+    'https://github.com/Labyrinth0419/SJTU-Course-Block/issues';
 
 class FaqScreen extends StatefulWidget {
   const FaqScreen({super.key});
@@ -241,7 +243,7 @@ class _FaqScreenState extends State<FaqScreen> {
                     title: '提交问题反馈',
                     subtitle: '前往项目仓库反馈问题或提出建议',
                     onTap: () => launchUrl(
-                      Uri.parse(_releasesUrl),
+                      Uri.parse(_issuesUrl),
                       mode: LaunchMode.externalApplication,
                     ),
                   ),

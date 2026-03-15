@@ -23,7 +23,7 @@ class GraduateCourseParser {
     }
     if (term == '3') {
       final next = int.tryParse(year) ?? 0;
-      return '${next + 1}03';
+      return '${next + 1}06';
     }
     return '${year}09';
   }

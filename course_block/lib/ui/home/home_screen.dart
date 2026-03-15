@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/models/course.dart';
 import '../../core/providers/course_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../main.dart';
@@ -19,25 +23,27 @@ class _HomeScreenState extends State<HomeScreen>
     with RouteAware, WidgetsBindingObserver {
   PageController? _pageController;
   bool _controllerReady = false;
-
-  String _weekDayToString(int weekDay) {
-    const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    return weekDays[weekDay - 1];
-  }
+  bool _routeSubscribed = false;
+  String? _backgroundImagePath;
+  ImageProvider<Object>? _backgroundImageProvider;
+  int _backgroundImageRequestId = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CourseProvider>().loadCourses().then((_) {
-        if (!mounted) return;
-        final currentWeek = context.read<CourseProvider>().currentWeek;
-        setState(() {
-          _pageController = PageController(initialPage: currentWeek - 1);
-          _controllerReady = true;
-        });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final provider = context.read<CourseProvider>();
+      await provider.loadCourses();
+      if (!mounted) return;
+
+      await _syncBackgroundImage(waitForDecode: true);
+      if (!mounted) return;
+
+      setState(() {
+        _pageController = PageController(initialPage: provider.currentWeek - 1);
+        _controllerReady = true;
       });
     });
 
@@ -47,15 +53,14 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final route = ModalRoute.of(context);
-    if (route != null) {
-      routeObserver.subscribe(this, route as PageRoute);
+    if (_routeSubscribed) {
+      return;
     }
 
-    final currentWeek = context.watch<CourseProvider>().currentWeek;
-    if (_pageController?.hasClients == true &&
-        _pageController!.page?.round() != currentWeek - 1) {
-      _pageController!.jumpToPage(currentWeek - 1);
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      routeObserver.subscribe(this, route);
+      _routeSubscribed = true;
     }
   }
 
@@ -63,58 +68,98 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     context.read<CourseProvider>().removeListener(_providerListener);
-    routeObserver.unsubscribe(this);
+    if (_routeSubscribed) {
+      routeObserver.unsubscribe(this);
+    }
     _pageController?.dispose();
     super.dispose();
   }
 
+  Future<void> _syncBackgroundImage({bool waitForDecode = false}) async {
+    if (!mounted) return;
+
+    final rawPath = context.read<CourseProvider>().backgroundImagePath?.trim();
+    final nextPath = (rawPath == null || rawPath.isEmpty) ? null : rawPath;
+
+    if (nextPath == _backgroundImagePath &&
+        (nextPath == null || _backgroundImageProvider != null)) {
+      return;
+    }
+
+    _backgroundImagePath = nextPath;
+    final requestId = ++_backgroundImageRequestId;
+
+    if (nextPath == null) {
+      if (mounted) {
+        setState(() {
+          _backgroundImageProvider = null;
+        });
+      }
+      return;
+    }
+
+    final imageProvider = FileImage(File(nextPath));
+
+    Future<void> loadImage() async {
+      try {
+        await precacheImage(imageProvider, context);
+      } catch (e) {
+        debugPrint('Failed to precache schedule background: $e');
+      }
+
+      if (!mounted || requestId != _backgroundImageRequestId) {
+        return;
+      }
+
+      setState(() {
+        _backgroundImageProvider = imageProvider;
+      });
+    }
+
+    if (waitForDecode) {
+      await loadImage();
+    } else {
+      unawaited(loadImage());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isLoading = context.select<CourseProvider, bool>(
+      (provider) => provider.isLoading,
+    );
+
+    if (isLoading || !_controllerReady || _pageController == null) {
+      return const Scaffold(
+        body: SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+
     return Scaffold(
       body: SafeArea(
-        child: Consumer<CourseProvider>(
-          builder: (context, provider, child) {
-            if (provider.isLoading || !_controllerReady) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final now = DateTime.now();
-            final subtitle =
-                '第${provider.currentWeek}周  ${_weekDayToString(now.weekday)} · ${provider.currentSchedule?.name ?? '未命名课表'}';
-
-            return Column(
-              children: [
-                _HomeHeader(
-                  dateText: '${now.year}/${now.month}/${now.day}',
-                  subtitle: subtitle,
-                  onAddCourse: _openAddCourseScreen,
-                  onImportSelected: (action) =>
-                      handleImportMenuAction(context, action),
-                  onExportSelected: (action) =>
-                      handleExportMenuAction(context, action),
-                  onOpenMore: () => showMoreFunctionsSheet(context),
-                ),
-                Expanded(
-                  child: PageView.builder(
-                    controller: _pageController!,
-                    onPageChanged: (index) {
-                      if (provider.currentWeek != index + 1) {
-                        provider.setCurrentWeek(index + 1);
-                      }
-                    },
-                    itemCount: provider.totalWeeks,
-                    itemBuilder: (context, index) {
-                      return ScheduleGrid(
-                        courses: provider.courses,
-                        currentWeek: index + 1,
-                        startDate: provider.currentSchedule?.startDate,
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
+        child: Column(
+          children: [
+            _HomeHeaderSection(
+              onAddCourse: _openAddCourseScreen,
+              onImportSelected: (action) =>
+                  handleImportMenuAction(context, action),
+              onExportSelected: (action) =>
+                  handleExportMenuAction(context, action),
+              onOpenMore: () => showMoreFunctionsSheet(context),
+            ),
+            Expanded(
+              child: _HomeScheduleViewport(
+                controller: _pageController!,
+                backgroundImageProvider: _backgroundImageProvider,
+                onPageChanged: (index) {
+                  final provider = context.read<CourseProvider>();
+                  if (provider.currentWeek != index + 1) {
+                    provider.setCurrentWeek(index + 1);
+                  }
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -131,16 +176,20 @@ class _HomeScreenState extends State<HomeScreen>
 
   void _providerListener() {
     if (!mounted || _pageController == null) return;
+
+    unawaited(_syncBackgroundImage());
+
     final provider = context.read<CourseProvider>();
     final target = provider.currentWeek - 1;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_pageController == null) return;
-      if (_pageController!.hasClients) {
-        final page =
-            _pageController!.page ?? _pageController!.initialPage.toDouble();
-        if (page.round() != target) {
-          _pageController!.jumpToPage(target);
-        }
+      if (_pageController == null || !_pageController!.hasClients) {
+        return;
+      }
+
+      final page =
+          _pageController!.page ?? _pageController!.initialPage.toDouble();
+      if (page.round() != target) {
+        _pageController!.jumpToPage(target);
       }
     });
   }
@@ -151,8 +200,7 @@ class _HomeScreenState extends State<HomeScreen>
     final maxPage = provider.totalWeeks - 1;
     final currentPage = _pageController!.page ?? _pageController!.initialPage;
     if (currentPage < 0 || currentPage > maxPage) {
-      final target = provider.currentWeek - 1;
-      _pageController!.jumpToPage(target);
+      _pageController!.jumpToPage(provider.currentWeek - 1);
     }
   }
 
@@ -160,6 +208,8 @@ class _HomeScreenState extends State<HomeScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       context.read<CourseProvider>().loadCourses().then((_) {
+        if (!mounted) return;
+        unawaited(_syncBackgroundImage());
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _ensureCorrectPage();
         });
@@ -169,7 +219,152 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void didPopNext() {
+    unawaited(_syncBackgroundImage());
     _ensureCorrectPage();
+  }
+}
+
+class _HomeHeaderSection extends StatelessWidget {
+  const _HomeHeaderSection({
+    required this.onAddCourse,
+    required this.onImportSelected,
+    required this.onExportSelected,
+    required this.onOpenMore,
+  });
+
+  final VoidCallback onAddCourse;
+  final ValueChanged<ImportMenuAction> onImportSelected;
+  final ValueChanged<ExportMenuAction> onExportSelected;
+  final VoidCallback onOpenMore;
+
+  String _weekDayToString(int weekDay) {
+    const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    return weekDays[weekDay - 1];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<CourseProvider, ({int currentWeek, String scheduleName})>(
+      selector: (_, provider) => (
+        currentWeek: provider.currentWeek,
+        scheduleName: provider.currentSchedule?.name ?? '未命名课表',
+      ),
+      builder: (context, data, _) {
+        final now = DateTime.now();
+        final subtitle =
+            '第${data.currentWeek}周  ${_weekDayToString(now.weekday)} · ${data.scheduleName}';
+
+        return _HomeHeader(
+          dateText: '${now.year}/${now.month}/${now.day}',
+          subtitle: subtitle,
+          onAddCourse: onAddCourse,
+          onImportSelected: onImportSelected,
+          onExportSelected: onExportSelected,
+          onOpenMore: onOpenMore,
+        );
+      },
+    );
+  }
+}
+
+class _HomeScheduleViewport extends StatelessWidget {
+  const _HomeScheduleViewport({
+    required this.controller,
+    required this.backgroundImageProvider,
+    required this.onPageChanged,
+  });
+
+  final PageController controller;
+  final ImageProvider<Object>? backgroundImageProvider;
+  final ValueChanged<int> onPageChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<CourseProvider, _ScheduleViewportData>(
+      selector: (_, provider) => _ScheduleViewportData(
+        courses: provider.courses,
+        totalWeeks: provider.totalWeeks,
+        startDate: provider.currentSchedule?.startDate,
+        showGridLines: provider.showGridLines,
+        showNonCurrentWeek: provider.showNonCurrentWeek,
+        showSaturday: provider.showSaturday,
+        showSunday: provider.showSunday,
+        outlineText: provider.outlineText,
+        maxDailyClasses: provider.maxDailyClasses,
+        gridHeight: provider.gridHeight,
+        cornerRadius: provider.cornerRadius,
+        courseColorPalette: provider.courseColorPalette,
+        backgroundColorLight: provider.backgroundColorLight,
+        backgroundColorDark: provider.backgroundColorDark,
+        backgroundImageOpacity: provider.backgroundImageOpacity,
+      ),
+      builder: (context, data, _) {
+        final theme = Theme.of(context);
+        final palette = context.appTheme;
+        final brightness = theme.brightness;
+        final backgroundColor =
+            (brightness == Brightness.dark
+                ? data.backgroundColorDark
+                : data.backgroundColorLight) ??
+            theme.scaffoldBackgroundColor;
+
+        return DecoratedBox(
+          decoration: BoxDecoration(color: backgroundColor),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (backgroundImageProvider != null)
+                RepaintBoundary(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      image: DecorationImage(
+                        image: backgroundImageProvider!,
+                        fit: BoxFit.cover,
+                        colorFilter: ColorFilter.mode(
+                          palette.backgroundImageOverlay.withValues(
+                            alpha: data.backgroundImageOpacity,
+                          ),
+                          BlendMode.dstATop,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              RepaintBoundary(
+                child: PageView.builder(
+                  controller: controller,
+                  allowImplicitScrolling: true,
+                  onPageChanged: onPageChanged,
+                  itemCount: data.totalWeeks,
+                  itemBuilder: (context, index) {
+                    return RepaintBoundary(
+                      child: ScheduleGrid(
+                        courses: data.courses,
+                        currentWeek: index + 1,
+                        totalWeeks: data.totalWeeks,
+                        maxDailyClasses: data.maxDailyClasses,
+                        showGridLines: data.showGridLines,
+                        showNonCurrentWeek: data.showNonCurrentWeek,
+                        showSaturday: data.showSaturday,
+                        showSunday: data.showSunday,
+                        outlineText: data.outlineText,
+                        gridHeight: data.gridHeight,
+                        cornerRadius: data.cornerRadius,
+                        courseColorPalette: data.courseColorPalette,
+                        startDate: data.startDate,
+                        onRefreshRequested: () => context
+                            .read<CourseProvider>()
+                            .loadCourses(recalcWeek: false),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -351,6 +546,82 @@ class _HomeHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ScheduleViewportData {
+  const _ScheduleViewportData({
+    required this.courses,
+    required this.totalWeeks,
+    required this.startDate,
+    required this.showGridLines,
+    required this.showNonCurrentWeek,
+    required this.showSaturday,
+    required this.showSunday,
+    required this.outlineText,
+    required this.maxDailyClasses,
+    required this.gridHeight,
+    required this.cornerRadius,
+    required this.courseColorPalette,
+    required this.backgroundColorLight,
+    required this.backgroundColorDark,
+    required this.backgroundImageOpacity,
+  });
+
+  final List<Course> courses;
+  final int totalWeeks;
+  final DateTime? startDate;
+  final bool showGridLines;
+  final bool showNonCurrentWeek;
+  final bool showSaturday;
+  final bool showSunday;
+  final bool outlineText;
+  final int maxDailyClasses;
+  final double gridHeight;
+  final double cornerRadius;
+  final AppCourseColorPalette courseColorPalette;
+  final Color? backgroundColorLight;
+  final Color? backgroundColorDark;
+  final double backgroundImageOpacity;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is _ScheduleViewportData &&
+            identical(courses, other.courses) &&
+            totalWeeks == other.totalWeeks &&
+            startDate == other.startDate &&
+            showGridLines == other.showGridLines &&
+            showNonCurrentWeek == other.showNonCurrentWeek &&
+            showSaturday == other.showSaturday &&
+            showSunday == other.showSunday &&
+            outlineText == other.outlineText &&
+            maxDailyClasses == other.maxDailyClasses &&
+            gridHeight == other.gridHeight &&
+            cornerRadius == other.cornerRadius &&
+            courseColorPalette == other.courseColorPalette &&
+            backgroundColorLight == other.backgroundColorLight &&
+            backgroundColorDark == other.backgroundColorDark &&
+            backgroundImageOpacity == other.backgroundImageOpacity;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    courses,
+    totalWeeks,
+    startDate,
+    showGridLines,
+    showNonCurrentWeek,
+    showSaturday,
+    showSunday,
+    outlineText,
+    maxDailyClasses,
+    gridHeight,
+    cornerRadius,
+    courseColorPalette,
+    backgroundColorLight,
+    backgroundColorDark,
+    backgroundImageOpacity,
+  );
 }
 
 class _HeaderIconButton extends StatelessWidget {
