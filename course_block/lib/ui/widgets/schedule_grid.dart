@@ -159,6 +159,35 @@ class ScheduleGrid extends StatelessWidget {
           }
         }
 
+        // Precompute each card's geometry + color once per build. The cards are
+        // then drawn by a single CustomPainter instead of one widget subtree per
+        // course, so a course-heavy week no longer builds/lays-out/rasterizes N
+        // card widgets on the frame it first materializes (the paging jank).
+        final List<_CardPlacement> placements = [
+          for (final course in displayCourses)
+            _CardPlacement(
+              course: course,
+              inWeek: inWeek[course] ?? false,
+              color: _getCourseColor(
+                course,
+                inWeek[course] ?? false,
+                palette,
+                courseColorPalette,
+                brightness,
+              ),
+              rect: Rect.fromLTWH(
+                timeColumnWidth +
+                    (course.dayOfWeek - 1) * dayColumnWidth +
+                    1 +
+                    ((courseIndex[course] ?? 0) *
+                        ((dayColumnWidth - 2) / (courseTotal[course] ?? 1))),
+                ((course.startNode - 1) * rowHeight) + 1,
+                ((dayColumnWidth - 2) / (courseTotal[course] ?? 1)) - 2,
+                course.step * rowHeight - 2,
+              ),
+            ),
+        ];
+
         return Column(
           children: [
             SizedBox(
@@ -309,112 +338,18 @@ class ScheduleGrid extends StatelessWidget {
                               ),
                             ),
                           ),
-                        for (final course in displayCourses)
-                          Positioned(
-                            top: ((course.startNode - 1) * rowHeight) + 1,
-                            left:
-                                timeColumnWidth +
-                                (course.dayOfWeek - 1) * dayColumnWidth +
-                                1 +
-                                ((courseIndex[course] ?? 0) *
-                                    ((dayColumnWidth - 2) /
-                                        (courseTotal[course] ?? 1))),
-                            width:
-                                ((dayColumnWidth - 2) /
-                                    (courseTotal[course] ?? 1)) -
-                                2,
-                            height: course.step * rowHeight - 2,
-                            child: GestureDetector(
-                              onTap: () => _showCourseDetail(context, course),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: _getCourseColor(
-                                    course,
-                                    inWeek[course] ?? false,
-                                    palette,
-                                    courseColorPalette,
-                                    brightness,
-                                  ),
-                                  borderRadius: BorderRadius.circular(
-                                    cornerRadius,
-                                  ),
-                                ),
-                                padding: const EdgeInsets.all(2.0),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    outlineText
-                                        ? _outlinedText(
-                                            course.courseName,
-                                            baseStyle: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            maxLines: 4,
-                                            outlineColor: palette.courseOutline,
-                                          )
-                                        : Text(
-                                            course.courseName,
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              shadows: [
-                                                Shadow(
-                                                  offset: const Offset(0, 1),
-                                                  blurRadius: 2,
-                                                  color:
-                                                      palette.courseTextShadow,
-                                                ),
-                                              ],
-                                            ),
-                                            textAlign: TextAlign.center,
-                                            maxLines: 4,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                    outlineText
-                                        ? _outlinedText(
-                                            '@${course.classRoom}',
-                                            baseStyle: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 9,
-                                            ),
-                                            maxLines: 3,
-                                            outlineColor: palette.courseOutline,
-                                          )
-                                        : Text(
-                                            '@${course.classRoom}',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 9,
-                                              shadows: [
-                                                Shadow(
-                                                  offset: const Offset(0, 1),
-                                                  blurRadius: 2,
-                                                  color:
-                                                      palette.courseTextShadow,
-                                                ),
-                                              ],
-                                            ),
-                                            textAlign: TextAlign.center,
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                    if (!(inWeek[course] ?? false))
-                                      Text(
-                                        '(非本周)',
-                                        style: TextStyle(
-                                          color: palette.nonCurrentCourseLabel,
-                                          fontSize: 9,
-                                          fontStyle: FontStyle.italic,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                        Positioned.fill(
+                          child: _CourseCardLayer(
+                            placements: placements,
+                            cornerRadius: cornerRadius,
+                            outlineText: outlineText,
+                            outlineColor: palette.courseOutline,
+                            textShadowColor: palette.courseTextShadow,
+                            nonCurrentLabelColor: palette.nonCurrentCourseLabel,
+                            onTapCourse: (course) =>
+                                _showCourseDetail(context, course),
                           ),
+                        ),
                       ],
                     ),
                   ),
@@ -737,39 +672,6 @@ class ScheduleGrid extends StatelessWidget {
     }
     return base;
   }
-
-  /// Render a piece of text with a very thin black stroke (outline) beneath
-  /// the normal filled white text.
-  Widget _outlinedText(
-    String text, {
-    required TextStyle baseStyle,
-    int maxLines = 1,
-    required Color outlineColor,
-  }) {
-    return Stack(
-      children: [
-        Text(
-          text,
-          style: baseStyle.copyWith(
-            foreground: Paint()
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 0.5
-              ..color = outlineColor,
-          ),
-          maxLines: maxLines,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-        ),
-        Text(
-          text,
-          style: baseStyle,
-          maxLines: maxLines,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-        ),
-      ],
-    );
-  }
 }
 
 class _CourseDetailRow extends StatelessWidget {
@@ -838,6 +740,248 @@ class _CourseDetailRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Geometry + resolved color for one course card, computed once per build so
+/// the painter does no per-frame layout work.
+class _CardPlacement {
+  const _CardPlacement({
+    required this.course,
+    required this.inWeek,
+    required this.color,
+    required this.rect,
+  });
+
+  final Course course;
+  final bool inWeek;
+  final Color color;
+  final Rect rect;
+}
+
+/// Draws every course card for a week in a single CustomPaint and hit-tests
+/// taps against the precomputed rects. Replaces the former one-widget-subtree-
+/// per-course layout, whose build/layout/first-raster cost scaled with course
+/// count and produced the paging jank on course-heavy weeks.
+class _CourseCardLayer extends StatelessWidget {
+  const _CourseCardLayer({
+    required this.placements,
+    required this.cornerRadius,
+    required this.outlineText,
+    required this.outlineColor,
+    required this.textShadowColor,
+    required this.nonCurrentLabelColor,
+    required this.onTapCourse,
+  });
+
+  final List<_CardPlacement> placements;
+  final double cornerRadius;
+  final bool outlineText;
+  final Color outlineColor;
+  final Color textShadowColor;
+  final Color nonCurrentLabelColor;
+  final ValueChanged<Course> onTapCourse;
+
+  void _handleTapUp(TapUpDetails details) {
+    final Offset local = details.localPosition;
+    // Topmost (last-painted) card wins, matching the old Stack paint order.
+    for (int i = placements.length - 1; i >= 0; i--) {
+      if (placements[i].rect.contains(local)) {
+        onTapCourse(placements[i].course);
+        return;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTapUp: _handleTapUp,
+      child: CustomPaint(
+        painter: _CourseCardPainter(
+          placements: placements,
+          cornerRadius: cornerRadius,
+          outlineText: outlineText,
+          outlineColor: outlineColor,
+          textShadowColor: textShadowColor,
+          nonCurrentLabelColor: nonCurrentLabelColor,
+          textDirection: Directionality.of(context),
+        ),
+      ),
+    );
+  }
+}
+
+class _CourseCardPainter extends CustomPainter {
+  _CourseCardPainter({
+    required this.placements,
+    required this.cornerRadius,
+    required this.outlineText,
+    required this.outlineColor,
+    required this.textShadowColor,
+    required this.nonCurrentLabelColor,
+    required this.textDirection,
+  });
+
+  final List<_CardPlacement> placements;
+  final double cornerRadius;
+  final bool outlineText;
+  final Color outlineColor;
+  final Color textShadowColor;
+  final Color nonCurrentLabelColor;
+  final TextDirection textDirection;
+
+  static const double _padding = 2.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint fill = Paint()..isAntiAlias = true;
+
+    for (final placement in placements) {
+      final Rect rect = placement.rect;
+      final RRect rrect = RRect.fromRectAndRadius(
+        rect,
+        Radius.circular(cornerRadius),
+      );
+      fill.color = placement.color;
+      canvas.drawRRect(rrect, fill);
+
+      final double innerWidth = rect.width - _padding * 2;
+      if (innerWidth <= 0) continue;
+
+      // Clip to the card so long names/rooms don't bleed past the rounded edge.
+      canvas.save();
+      canvas.clipRRect(rrect);
+
+      final List<_CardLine> lines = [
+        _CardLine(
+          text: placement.course.courseName,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          maxLines: 4,
+        ),
+        _CardLine(
+          text: '@${placement.course.classRoom}',
+          fontSize: 9,
+          fontWeight: FontWeight.normal,
+          maxLines: 3,
+        ),
+        if (!placement.inWeek)
+          _CardLine(
+            text: '(非本周)',
+            fontSize: 9,
+            fontWeight: FontWeight.normal,
+            maxLines: 1,
+            color: nonCurrentLabelColor,
+            italic: true,
+          ),
+      ];
+
+      final List<TextPainter> painters = [
+        for (final line in lines) _layoutLine(line, innerWidth),
+      ];
+
+      double totalHeight = 0;
+      for (final tp in painters) {
+        totalHeight += tp.height;
+      }
+
+      // Vertically center the text block within the card, like the old
+      // Column(mainAxisAlignment: center).
+      double dy = rect.top + (rect.height - totalHeight) / 2;
+      if (dy < rect.top + _padding) dy = rect.top + _padding;
+      final double left = rect.left + _padding;
+      for (int i = 0; i < painters.length; i++) {
+        final TextPainter tp = painters[i];
+        final double dx = left + (innerWidth - tp.width) / 2;
+        final Offset offset = Offset(dx, dy);
+        // outlineText mode: draw a thin stroke underneath the fill, matching
+        // the old _outlinedText two-pass Stack.
+        if (outlineText) {
+          final TextPainter stroke = _layoutLine(lines[i], innerWidth, stroke: true);
+          stroke.paint(canvas, offset);
+        }
+        tp.paint(canvas, offset);
+        dy += tp.height;
+      }
+
+      canvas.restore();
+    }
+  }
+
+  TextPainter _layoutLine(_CardLine line, double maxWidth, {bool stroke = false}) {
+    final Color textColor = line.color ?? Colors.white;
+    final TextStyle style = stroke
+        ? TextStyle(
+            fontSize: line.fontSize,
+            fontWeight: line.fontWeight,
+            fontStyle: line.italic ? FontStyle.italic : FontStyle.normal,
+            foreground: Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 0.5
+              ..color = outlineColor,
+          )
+        : outlineText
+        ? TextStyle(
+            color: textColor,
+            fontSize: line.fontSize,
+            fontWeight: line.fontWeight,
+            fontStyle: line.italic ? FontStyle.italic : FontStyle.normal,
+          )
+        : TextStyle(
+            color: textColor,
+            fontSize: line.fontSize,
+            fontWeight: line.fontWeight,
+            fontStyle: line.italic ? FontStyle.italic : FontStyle.normal,
+            shadows: [
+              Shadow(
+                offset: const Offset(0, 1),
+                // blurRadius 0：纯偏移投影，避免文字模糊带来的离屏 pass
+                // （Impeller/Vulkan 在本机型上模糊光栅化开销过高）。
+                blurRadius: 0,
+                color: textShadowColor,
+              ),
+            ],
+          );
+
+    final TextPainter tp = TextPainter(
+      text: TextSpan(text: line.text, style: style),
+      textAlign: TextAlign.center,
+      textDirection: textDirection,
+      maxLines: line.maxLines,
+      ellipsis: '…',
+    )..layout(maxWidth: maxWidth);
+    return tp;
+  }
+
+  @override
+  bool shouldRepaint(covariant _CourseCardPainter oldDelegate) {
+    return oldDelegate.placements != placements ||
+        oldDelegate.cornerRadius != cornerRadius ||
+        oldDelegate.outlineText != outlineText ||
+        oldDelegate.outlineColor != outlineColor ||
+        oldDelegate.textShadowColor != textShadowColor ||
+        oldDelegate.nonCurrentLabelColor != nonCurrentLabelColor ||
+        oldDelegate.textDirection != textDirection;
+  }
+}
+
+class _CardLine {
+  const _CardLine({
+    required this.text,
+    required this.fontSize,
+    required this.fontWeight,
+    required this.maxLines,
+    this.color,
+    this.italic = false,
+  });
+
+  final String text;
+  final double fontSize;
+  final FontWeight fontWeight;
+  final int maxLines;
+  final Color? color;
+  final bool italic;
 }
 
 class GridPainter extends CustomPainter {
