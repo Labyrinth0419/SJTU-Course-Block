@@ -27,6 +27,9 @@ class _HomeScreenState extends State<HomeScreen>
   String? _backgroundImagePath;
   ImageProvider<Object>? _backgroundImageProvider;
   int _backgroundImageRequestId = 0;
+  // Set while the week change originates from a user swipe, so the provider
+  // listener skips the (redundant) page-correction work for that notify.
+  bool _weekChangeFromSwipe = false;
 
   @override
   void initState() {
@@ -154,6 +157,7 @@ class _HomeScreenState extends State<HomeScreen>
                 onPageChanged: (index) {
                   final provider = context.read<CourseProvider>();
                   if (provider.currentWeek != index + 1) {
+                    _weekChangeFromSwipe = true;
                     provider.setCurrentWeek(index + 1);
                   }
                 },
@@ -178,6 +182,14 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted || _pageController == null) return;
 
     unawaited(_syncBackgroundImage());
+
+    // A swipe-driven week change already left the PageView on the right page,
+    // so skip the post-frame correction (and its frame callback) for it. Only
+    // external changes (reload/recalc/schedule switch) need the page synced.
+    if (_weekChangeFromSwipe) {
+      _weekChangeFromSwipe = false;
+      return;
+    }
 
     final provider = context.read<CourseProvider>();
     final target = provider.currentWeek - 1;
