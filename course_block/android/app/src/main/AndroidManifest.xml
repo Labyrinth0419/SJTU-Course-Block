@@ -11,9 +11,13 @@
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
         <!-- 关闭 Impeller，回退到 Skia 渲染后端。Impeller/Vulkan 在本机型上
-             光栅化课程卡的模糊阴影/描边文字与背景图混合时开销过高，导致翻页
-             掉帧（实测 Raster p90 ~18ms、jank 10%）；Skia 下同样代码 Raster
-             p90 降到 ~3ms、jank 归零。 -->
+             光栅化课程卡的模糊阴影/逐卡 layer 合成时开销过高，导致翻页掉帧
+             （实测 Raster p90 ~18ms、jank 10%）；Skia 下同样代码 Raster p90
+             降到 ~3ms、jank 归零。
+             注：课程卡已改为单个 CustomPaint 绘制（消除逐卡 layer 合成）、文字
+             阴影 blurRadius 已改为 0（消除模糊离屏 pass），逐卡分层与模糊这两个
+             当年拖垮 Impeller 的根因已消除，理论上可重新启用 Impeller，但尚未在
+             本机型 profile 验证，故保持 Skia 作为安全基线。 -->
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
