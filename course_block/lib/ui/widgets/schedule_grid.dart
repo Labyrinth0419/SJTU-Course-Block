@@ -49,7 +49,20 @@ class ScheduleGrid extends StatelessWidget {
     final showWeekend = showSaturday || showSunday;
     final daysToShow = showWeekend ? 7 : 5;
 
-    final DateTime viewStartDate = (startDate ?? DateTime.now()).add(
+    // Capture "now" once per build instead of calling DateTime.now() for every
+    // header cell, and precompute whether each course meets in the current week
+    // so the (course, week) check isn't recomputed across filtering, layout and
+    // rendering.
+    final DateTime now = DateTime.now();
+    bool isToday(DateTime date) =>
+        date.year == now.year && date.month == now.month && date.day == now.day;
+
+    final Map<Course, bool> inWeek = {
+      for (final course in courses)
+        course: _isCourseInWeek(course, currentWeek),
+    };
+
+    final DateTime viewStartDate = (startDate ?? now).add(
       Duration(days: (currentWeek - 1) * 7),
     );
 
@@ -67,7 +80,7 @@ class ScheduleGrid extends StatelessWidget {
         final double bodyHeight = classCount * rowHeight;
 
         final List<Course> candidates = courses.where((course) {
-          if (!_isCourseInWeek(course, currentWeek) && !showNonCurrentWeek) {
+          if (!(inWeek[course] ?? false) && !showNonCurrentWeek) {
             return false;
           }
           if (course.dayOfWeek > 5 && !showWeekend) return false;
@@ -85,12 +98,12 @@ class ScheduleGrid extends StatelessWidget {
         }
 
         for (final course in candidates) {
-          if (_isCourseInWeek(course, currentWeek) && !course.isVirtual) {
+          if ((inWeek[course] ?? false) && !course.isVirtual) {
             displayCourses.add(course);
           }
         }
         for (final course in candidates) {
-          if (_isCourseInWeek(course, currentWeek) && course.isVirtual) {
+          if ((inWeek[course] ?? false) && course.isVirtual) {
             final conflict = displayCourses.any(
               (other) => overlaps(course, other),
             );
@@ -100,11 +113,9 @@ class ScheduleGrid extends StatelessWidget {
           }
         }
         for (final course in candidates) {
-          if (!_isCourseInWeek(course, currentWeek)) {
+          if (!(inWeek[course] ?? false)) {
             final conflictWithCurrent = displayCourses.any(
-              (other) =>
-                  _isCourseInWeek(other, currentWeek) &&
-                  overlaps(course, other),
+              (other) => (inWeek[other] ?? false) && overlaps(course, other),
             );
             if (!conflictWithCurrent) {
               displayCourses.add(course);
@@ -210,10 +221,10 @@ class ScheduleGrid extends StatelessWidget {
                                       '${date.month}/${date.day}',
                                       style: TextStyle(
                                         fontSize: 10,
-                                        color: _isToday(date)
+                                        color: isToday(date)
                                             ? palette.gridTodayText
                                             : palette.gridMinorText,
-                                        fontWeight: _isToday(date)
+                                        fontWeight: isToday(date)
                                             ? FontWeight.bold
                                             : FontWeight.normal,
                                       ),
@@ -239,166 +250,173 @@ class ScheduleGrid extends StatelessWidget {
             ),
             Expanded(
               child: SingleChildScrollView(
-                child: SizedBox(
-                  height: bodyHeight,
-                  child: Stack(
-                    children: [
-                      CustomPaint(
-                        size: Size(constraints.maxWidth, bodyHeight),
-                        painter: GridPainter(
-                          timeColumnWidth: timeColumnWidth,
-                          dayColumnWidth: dayColumnWidth,
-                          weekendColumnWidth: weekendColumnWidth,
-                          rowHeight: rowHeight,
-                          daysToShow: daysToShow,
-                          showGridLines: showGridLines,
-                          classCount: classCount,
-                          lineColor: palette.gridLineColor,
-                          drawRows: true,
-                          drawBottomBorder: false,
-                        ),
-                      ),
-                      for (int i = 0; i < classCount; i++)
-                        Positioned(
-                          top: i * rowHeight,
-                          left: 0,
-                          width: timeColumnWidth,
-                          height: rowHeight,
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  '${i + 1}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                                Text(
-                                  kClassStartTimes[i],
-                                  style: TextStyle(
-                                    fontSize: 8,
-                                    color: palette.gridMinorText,
-                                  ),
-                                ),
-                                Text(
-                                  kClassEndTimes[i],
-                                  style: TextStyle(
-                                    fontSize: 8,
-                                    color: palette.gridMinorText,
-                                  ),
-                                ),
-                              ],
-                            ),
+                // Cache the scrolling body as its own layer so dragging only
+                // re-composites a rasterized layer instead of repainting every
+                // course card (with its blur shadows / outlined text) per frame.
+                child: RepaintBoundary(
+                  child: SizedBox(
+                    height: bodyHeight,
+                    child: Stack(
+                      children: [
+                        CustomPaint(
+                          size: Size(constraints.maxWidth, bodyHeight),
+                          painter: GridPainter(
+                            timeColumnWidth: timeColumnWidth,
+                            dayColumnWidth: dayColumnWidth,
+                            weekendColumnWidth: weekendColumnWidth,
+                            rowHeight: rowHeight,
+                            daysToShow: daysToShow,
+                            showGridLines: showGridLines,
+                            classCount: classCount,
+                            lineColor: palette.gridLineColor,
+                            drawRows: true,
+                            drawBottomBorder: false,
                           ),
                         ),
-                      for (final course in displayCourses)
-                        Positioned(
-                          top: ((course.startNode - 1) * rowHeight) + 1,
-                          left:
-                              timeColumnWidth +
-                              (course.dayOfWeek - 1) * dayColumnWidth +
-                              1 +
-                              ((courseIndex[course] ?? 0) *
-                                  ((dayColumnWidth - 2) /
-                                      (courseTotal[course] ?? 1))),
-                          width:
-                              ((dayColumnWidth - 2) /
-                                  (courseTotal[course] ?? 1)) -
-                              2,
-                          height: course.step * rowHeight - 2,
-                          child: GestureDetector(
-                            onTap: () => _showCourseDetail(context, course),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: _getCourseColor(
-                                  course,
-                                  _isCourseInWeek(course, currentWeek),
-                                  palette,
-                                  courseColorPalette,
-                                  brightness,
-                                ),
-                                borderRadius: BorderRadius.circular(
-                                  cornerRadius,
-                                ),
-                              ),
-                              padding: const EdgeInsets.all(2.0),
+                        for (int i = 0; i < classCount; i++)
+                          Positioned(
+                            top: i * rowHeight,
+                            left: 0,
+                            width: timeColumnWidth,
+                            height: rowHeight,
+                            child: Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  outlineText
-                                      ? _outlinedText(
-                                          course.courseName,
-                                          baseStyle: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          maxLines: 4,
-                                          outlineColor: palette.courseOutline,
-                                        )
-                                      : Text(
-                                          course.courseName,
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            shadows: [
-                                              Shadow(
-                                                offset: const Offset(0, 1),
-                                                blurRadius: 2,
-                                                color: palette.courseTextShadow,
-                                              ),
-                                            ],
-                                          ),
-                                          textAlign: TextAlign.center,
-                                          maxLines: 4,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                  outlineText
-                                      ? _outlinedText(
-                                          '@${course.classRoom}',
-                                          baseStyle: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 9,
-                                          ),
-                                          maxLines: 3,
-                                          outlineColor: palette.courseOutline,
-                                        )
-                                      : Text(
-                                          '@${course.classRoom}',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 9,
-                                            shadows: [
-                                              Shadow(
-                                                offset: const Offset(0, 1),
-                                                blurRadius: 2,
-                                                color: palette.courseTextShadow,
-                                              ),
-                                            ],
-                                          ),
-                                          textAlign: TextAlign.center,
-                                          maxLines: 3,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                  if (!_isCourseInWeek(course, currentWeek))
-                                    Text(
-                                      '(非本周)',
-                                      style: TextStyle(
-                                        color: palette.nonCurrentCourseLabel,
-                                        fontSize: 9,
-                                        fontStyle: FontStyle.italic,
-                                      ),
+                                  Text(
+                                    '${i + 1}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: theme.colorScheme.onSurface,
                                     ),
+                                  ),
+                                  Text(
+                                    kClassStartTimes[i],
+                                    style: TextStyle(
+                                      fontSize: 8,
+                                      color: palette.gridMinorText,
+                                    ),
+                                  ),
+                                  Text(
+                                    kClassEndTimes[i],
+                                    style: TextStyle(
+                                      fontSize: 8,
+                                      color: palette.gridMinorText,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
                           ),
-                        ),
-                    ],
+                        for (final course in displayCourses)
+                          Positioned(
+                            top: ((course.startNode - 1) * rowHeight) + 1,
+                            left:
+                                timeColumnWidth +
+                                (course.dayOfWeek - 1) * dayColumnWidth +
+                                1 +
+                                ((courseIndex[course] ?? 0) *
+                                    ((dayColumnWidth - 2) /
+                                        (courseTotal[course] ?? 1))),
+                            width:
+                                ((dayColumnWidth - 2) /
+                                    (courseTotal[course] ?? 1)) -
+                                2,
+                            height: course.step * rowHeight - 2,
+                            child: GestureDetector(
+                              onTap: () => _showCourseDetail(context, course),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: _getCourseColor(
+                                    course,
+                                    inWeek[course] ?? false,
+                                    palette,
+                                    courseColorPalette,
+                                    brightness,
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    cornerRadius,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(2.0),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    outlineText
+                                        ? _outlinedText(
+                                            course.courseName,
+                                            baseStyle: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            maxLines: 4,
+                                            outlineColor: palette.courseOutline,
+                                          )
+                                        : Text(
+                                            course.courseName,
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              shadows: [
+                                                Shadow(
+                                                  offset: const Offset(0, 1),
+                                                  blurRadius: 2,
+                                                  color:
+                                                      palette.courseTextShadow,
+                                                ),
+                                              ],
+                                            ),
+                                            textAlign: TextAlign.center,
+                                            maxLines: 4,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                    outlineText
+                                        ? _outlinedText(
+                                            '@${course.classRoom}',
+                                            baseStyle: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 9,
+                                            ),
+                                            maxLines: 3,
+                                            outlineColor: palette.courseOutline,
+                                          )
+                                        : Text(
+                                            '@${course.classRoom}',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 9,
+                                              shadows: [
+                                                Shadow(
+                                                  offset: const Offset(0, 1),
+                                                  blurRadius: 2,
+                                                  color:
+                                                      palette.courseTextShadow,
+                                                ),
+                                              ],
+                                            ),
+                                            textAlign: TextAlign.center,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                    if (!(inWeek[course] ?? false))
+                                      Text(
+                                        '(非本周)',
+                                        style: TextStyle(
+                                          color: palette.nonCurrentCourseLabel,
+                                          fontSize: 9,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -751,13 +769,6 @@ class ScheduleGrid extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  bool _isToday(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day;
   }
 }
 
