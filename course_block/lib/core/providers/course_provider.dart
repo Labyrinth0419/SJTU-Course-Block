@@ -2,10 +2,12 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../core/models/canvas_todo.dart';
 import '../../core/models/course.dart';
 import '../../core/models/course_operation_report.dart';
 import '../../core/models/schedule.dart';
 import '../../core/theme/app_theme.dart';
+import '../services/canvas_service.dart';
 import '../services/course_service.dart';
 import '../services/course_schedule_manager.dart';
 import '../services/course_settings_store.dart';
@@ -39,6 +41,10 @@ class CourseProvider extends ChangeNotifier {
   int? _backgroundColorDark;
   String? _backgroundImagePath;
   double _backgroundImageOpacity = 0.3;
+
+  List<CanvasTodo> _canvasTodos = [];
+  bool _isLoadingCanvasTodos = false;
+  String? _canvasTodoError;
 
   List<Course> get courses => _courses;
   List<Schedule> get schedules => _schedules;
@@ -75,6 +81,10 @@ class CourseProvider extends ChangeNotifier {
   String? get backgroundImagePath => _backgroundImagePath;
   double get backgroundImageOpacity => _backgroundImageOpacity;
 
+  List<CanvasTodo> get canvasTodos => _canvasTodos;
+  bool get isLoadingCanvasTodos => _isLoadingCanvasTodos;
+  String? get canvasTodoError => _canvasTodoError;
+
   String? _launcherIcon;
   String? get launcherIcon => _launcherIcon;
 
@@ -82,6 +92,7 @@ class CourseProvider extends ChangeNotifier {
   final CourseSettingsStore _courseSettingsStore = CourseSettingsStore();
   final CourseSyncManager _courseSyncManager = CourseSyncManager();
   final CourseTransferManager _courseTransferManager = CourseTransferManager();
+  final CanvasService _canvasService = CanvasService();
 
   CourseProvider() {
     _loadAppSettings();
@@ -353,6 +364,26 @@ class CourseProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       _updateWidgetsSafe();
+    }
+  }
+
+  Future<void> loadCanvasTodos() async {
+    _isLoadingCanvasTodos = true;
+    _canvasTodoError = null;
+    notifyListeners();
+
+    try {
+      _canvasTodos = await _canvasService.fetchTodos();
+    } on CanvasLoginRequiredException catch (e) {
+      _canvasTodos = [];
+      _canvasTodoError = e.message;
+    } catch (e) {
+      _canvasTodos = [];
+      _canvasTodoError = '获取 Canvas 待办失败，请稍后重试';
+      debugPrint('Error loading Canvas todos: $e');
+    } finally {
+      _isLoadingCanvasTodos = false;
+      notifyListeners();
     }
   }
 

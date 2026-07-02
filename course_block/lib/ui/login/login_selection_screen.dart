@@ -96,6 +96,20 @@ class LoginSelectionScreen extends StatelessWidget {
               title: '研究生登录',
             ),
           ),
+          const SizedBox(height: 10),
+          _LoginEntryCard(
+            icon: Icons.web_rounded,
+            color: theme.colorScheme.tertiaryContainer,
+            title: 'Canvas（oc.sjtu.edu.cn）',
+            subtitle: '查看 Canvas 待办事项',
+            onTap: () => _openLogin(
+              context,
+              initialUrl: 'https://oc.sjtu.edu.cn/login',
+              loginSystem: AcademicLoginSystem.undergraduate,
+              title: 'Canvas 登录',
+              isCanvas: true,
+            ),
+          ),
         ],
       ),
     );
@@ -106,6 +120,7 @@ class LoginSelectionScreen extends StatelessWidget {
     required String initialUrl,
     required AcademicLoginSystem loginSystem,
     required String title,
+    bool isCanvas = false,
   }) async {
     final result = await Navigator.push<bool>(
       context,
@@ -114,6 +129,7 @@ class LoginSelectionScreen extends StatelessWidget {
           initialUrl: initialUrl,
           title: title,
           loginSystem: loginSystem,
+          isCanvas: isCanvas,
         ),
       ),
     );

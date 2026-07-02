@@ -7,6 +7,8 @@ import 'package:webview_cookie_manager_plus/webview_cookie_manager_plus.dart'
     as cookie_mgr;
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../core/services/canvas_service.dart';
+import '../../core/services/canvas_session.dart';
 import '../../core/services/login_session.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -16,11 +18,16 @@ class WebviewLoginScreen extends StatefulWidget {
     required this.initialUrl,
     required this.loginSystem,
     required this.title,
+    this.isCanvas = false,
   });
 
   final String initialUrl;
   final AcademicLoginSystem loginSystem;
   final String title;
+
+  /// 为 true 时走 Canvas（oc.sjtu.edu.cn）登录分支：登录后创建 API token 并保存到
+  /// [CanvasSessionStorage]，而不是写入教务系统的 [LoginSessionStorage]。
+  final bool isCanvas;
 
   @override
   State<WebviewLoginScreen> createState() => _WebviewLoginScreenState();
@@ -68,6 +75,16 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
             setState(() => _isLoading = false);
 
             if (_didSave || _isSaving) {
+              return;
+            }
+
+            if (widget.isCanvas) {
+              final uri = Uri.tryParse(url);
+              if (uri?.host == 'oc.sjtu.edu.cn' &&
+                  !url.contains('/login') &&
+                  uri?.scheme != 'jaccount') {
+                await _trySaveCanvasSession();
+              }
               return;
             }
 
@@ -167,6 +184,48 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       debugPrint('Error validating graduate login: $e');
+    } finally {
+      _isSaving = false;
+    }
+  }
+
+  Future<void> _trySaveCanvasSession() async {
+    try {
+      _isSaving = true;
+      final cookieManager = cookie_mgr.WebviewCookieManager();
+      final cookies = await cookieManager.getCookies('https://oc.sjtu.edu.cn');
+
+      if (cookies.isEmpty) {
+        return;
+      }
+
+      final cookieString = cookies
+          .map((c) => '${c.name}=${c.value}')
+          .join('; ');
+
+      final tokenResult = await CanvasService().createToken(cookieString);
+      if (tokenResult == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('创建 Canvas 访问令牌失败，请重试')),
+        );
+        return;
+      }
+
+      await CanvasSessionStorage.saveSession(
+        token: tokenResult.token,
+        tokenId: tokenResult.tokenId,
+        userInfo: tokenResult.userInfo,
+      );
+
+      if (!mounted) return;
+      _didSave = true;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Canvas 登录成功，已保存访问令牌')));
+      Navigator.pop(context, true);
+    } catch (e) {
+      debugPrint('Error saving Canvas session: $e');
     } finally {
       _isSaving = false;
     }

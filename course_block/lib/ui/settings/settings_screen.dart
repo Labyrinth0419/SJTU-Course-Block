@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/providers/course_provider.dart';
+import '../../core/services/canvas_service.dart';
+import '../../core/services/canvas_session.dart';
 import '../../core/services/login_session.dart';
 import '../../core/theme/app_theme.dart';
 import '../../ui/login/login_selection_screen.dart';
@@ -154,6 +156,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirm != true) return;
 
+    await _clearCanvasSession();
     await LoginSessionStorage.clearAll();
     if (!mounted || !context.mounted) return;
 
@@ -163,6 +166,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('已注销')));
+  }
+
+  /// 注销时撤销服务端 Canvas token 并清空本地存储（best-effort）。
+  Future<void> _clearCanvasSession() async {
+    if (!await CanvasSessionStorage.hasSession()) {
+      return;
+    }
+    final token = await CanvasSessionStorage.loadToken();
+    final tokenId = await CanvasSessionStorage.loadTokenId();
+    if (token != null && tokenId != null) {
+      await CanvasService().deleteToken(token, tokenId);
+    }
+    await CanvasSessionStorage.clear();
   }
 
   @override

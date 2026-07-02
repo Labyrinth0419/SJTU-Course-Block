@@ -9,6 +9,7 @@ import '../../core/providers/course_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../main.dart';
 import '../course/add_course_screen.dart';
+import '../screens/canvas_todos_screen.dart';
 import '../settings/more_functions_sheet.dart';
 import '../widgets/schedule_grid.dart';
 
@@ -148,6 +149,7 @@ class _HomeScreenState extends State<HomeScreen>
                   handleImportMenuAction(context, action),
               onExportSelected: (action) =>
                   handleExportMenuAction(context, action),
+              onOpenCanvas: _openCanvasTodos,
               onOpenMore: () => showMoreFunctionsSheet(context),
             ),
             Expanded(
@@ -176,6 +178,12 @@ class _HomeScreenState extends State<HomeScreen>
     ).push(MaterialPageRoute(builder: (_) => const AddCourseScreen()));
     if (!mounted) return;
     await provider.loadCourses(recalcWeek: false);
+  }
+
+  void _openCanvasTodos() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const CanvasTodosScreen()));
   }
 
   void _providerListener() {
@@ -241,12 +249,14 @@ class _HomeHeaderSection extends StatelessWidget {
     required this.onAddCourse,
     required this.onImportSelected,
     required this.onExportSelected,
+    required this.onOpenCanvas,
     required this.onOpenMore,
   });
 
   final VoidCallback onAddCourse;
   final ValueChanged<ImportMenuAction> onImportSelected;
   final ValueChanged<ExportMenuAction> onExportSelected;
+  final VoidCallback onOpenCanvas;
   final VoidCallback onOpenMore;
 
   String _weekDayToString(int weekDay) {
@@ -272,6 +282,7 @@ class _HomeHeaderSection extends StatelessWidget {
           onAddCourse: onAddCourse,
           onImportSelected: onImportSelected,
           onExportSelected: onExportSelected,
+          onOpenCanvas: onOpenCanvas,
           onOpenMore: onOpenMore,
         );
       },
@@ -387,6 +398,7 @@ class _HomeHeader extends StatelessWidget {
     required this.onAddCourse,
     required this.onImportSelected,
     required this.onExportSelected,
+    required this.onOpenCanvas,
     required this.onOpenMore,
   });
 
@@ -395,6 +407,7 @@ class _HomeHeader extends StatelessWidget {
   final VoidCallback onAddCourse;
   final ValueChanged<ImportMenuAction> onImportSelected;
   final ValueChanged<ExportMenuAction> onExportSelected;
+  final VoidCallback onOpenCanvas;
   final VoidCallback onOpenMore;
 
   @override
@@ -545,6 +558,14 @@ class _HomeHeader extends StatelessWidget {
               color: palette.headerExportContainer,
               iconColor: palette.headerExportForeground,
             ),
+          ),
+          const SizedBox(width: 6),
+          _HeaderIconButton(
+            tooltip: 'Canvas 待办',
+            icon: Icons.checklist_rounded,
+            color: palette.headerAddContainer,
+            iconColor: palette.headerAddForeground,
+            onPressed: onOpenCanvas,
           ),
           const SizedBox(width: 6),
           _HeaderIconButton(

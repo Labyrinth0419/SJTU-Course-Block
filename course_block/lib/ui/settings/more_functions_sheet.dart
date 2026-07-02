@@ -9,6 +9,7 @@ import '../../core/providers/course_provider.dart';
 import '../../core/services/course_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../screens/about_screen.dart';
+import '../screens/canvas_todos_screen.dart';
 import '../screens/faq_screen.dart';
 import 'schedule_settings_screen.dart';
 import 'schedule_editor_dialog.dart';
@@ -453,6 +454,16 @@ class _ToolStrip extends StatelessWidget {
           await Navigator.of(
             rootContext,
           ).push(MaterialPageRoute(builder: (_) => const FaqScreen()));
+        }),
+      ),
+      _ToolAction(
+        icon: Icons.checklist_rounded,
+        iconColor: context.appTheme.toolHelpColor,
+        label: 'Canvas 待办',
+        onTap: () => _dismissAndRun(context, () async {
+          await Navigator.of(
+            rootContext,
+          ).push(MaterialPageRoute(builder: (_) => const CanvasTodosScreen()));
         }),
       ),
       _ToolAction(
