@@ -121,6 +121,17 @@
             android:permission="android.permission.BIND_REMOTEVIEWS"
             android:exported="false" />
 
+        <receiver
+            android:name="com.labyrinth.course_block.widget.WidgetTimeChangeReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <!-- START AUTO ICONS -->
 
         <!-- alias for ic_launcher_an_an (auto-generated) -->

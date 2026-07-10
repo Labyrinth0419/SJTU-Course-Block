@@ -42,6 +42,10 @@ class WidgetSyncService {
       'course_palette',
       courseColorPalette.storageKey,
     );
+    await HomeWidget.saveWidgetData(
+      'widget_schedule_snapshot',
+      jsonEncode(_buildScheduleSnapshot(courses, schedule, totalWeeks)),
+    );
 
     if (schedule == null) {
       await HomeWidget.saveWidgetData('today_header', '课程表');
@@ -203,6 +207,64 @@ class WidgetSyncService {
       'timeRange': timeRange,
       'color': course.color,
     };
+  }
+
+  Map<String, dynamic> _buildScheduleSnapshot(
+    List<Course> courses,
+    Schedule? schedule,
+    int totalWeeks,
+  ) {
+    if (schedule == null) {
+      return {'version': 1, 'schedule': null, 'courses': const []};
+    }
+
+    final startDate = normalizeDate(schedule.startDate);
+    final startEpochDay =
+        DateTime.utc(
+          startDate.year,
+          startDate.month,
+          startDate.day,
+        ).millisecondsSinceEpoch ~/
+        Duration.millisecondsPerDay;
+
+    return {
+      'version': 1,
+      'schedule': {
+        'name': schedule.name,
+        'startEpochDay': startEpochDay,
+        'totalWeeks': totalWeeks,
+      },
+      'courses': courses.map((course) {
+        final startMinutes = _classTimeMinutes(
+          kClassStartTimes,
+          course.startNode - 1,
+        );
+        final endMinutes = _classTimeMinutes(
+          kClassEndTimes,
+          course.startNode + course.step - 2,
+        );
+        return {
+          'name': course.courseName,
+          'room': course.classRoom,
+          'color': course.color,
+          'startWeek': course.startWeek,
+          'endWeek': course.endWeek,
+          'dayOfWeek': course.dayOfWeek,
+          'isOddWeek': course.isOddWeek,
+          'isEvenWeek': course.isEvenWeek,
+          'weekCode': course.weekCode ?? '',
+          'startMinutes': startMinutes,
+          'endMinutes': endMinutes,
+          'timeRange': _formatTimeRange(course.startNode, course.step),
+        };
+      }).toList(),
+    };
+  }
+
+  int _classTimeMinutes(List<String> times, int index) {
+    final safeIndex = index.clamp(0, times.length - 1);
+    final parts = times[safeIndex].split(':');
+    return (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
   }
 
   String _themeModeToStorage(ThemeMode mode) {
