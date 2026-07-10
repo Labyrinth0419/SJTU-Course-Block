@@ -54,6 +54,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
         appWidgetIds: IntArray
     ) {
         Log.d(TAG, "onUpdate called for ${appWidgetIds.size} widget(s)")
+        WidgetDataRefresher.refresh(context)
         val widgetData = context.getSharedPreferences(prefsName(context), Context.MODE_PRIVATE)
         for (widgetId in appWidgetIds) {
             try {

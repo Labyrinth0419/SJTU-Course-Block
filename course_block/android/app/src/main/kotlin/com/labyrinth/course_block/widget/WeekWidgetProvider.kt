@@ -37,6 +37,7 @@ class WeekWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
+        WidgetDataRefresher.refresh(context)
         val prefs = context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
         val theme = WidgetColors.resolve(context, prefs)
         for (widgetId in appWidgetIds) {
