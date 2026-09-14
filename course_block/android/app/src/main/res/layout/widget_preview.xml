@@ -79,7 +79,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="📍 上院316"
+                android:text="地点：上院316"
                 android:textColor="@color/widget_course_detail"
                 android:textSize="10sp"
             />
@@ -126,7 +126,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="📍 东中院105"
+                android:text="地点：东中院105"
                 android:textColor="@color/widget_course_detail"
                 android:textSize="10sp"
             />
@@ -173,7 +173,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="📍 东上院509"
+                android:text="地点：东上院509"
                 android:textColor="@color/widget_course_detail"
                 android:textSize="10sp"
             />
@@ -212,9 +212,13 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="↻"
+            android:contentDescription="刷新课程"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:gravity="center"
+            android:text="刷新"
             android:textColor="@color/widget_accent"
-            android:textSize="14sp"
+            android:textSize="11sp"
         />
         <TextView
             android:layout_width="0dp"
@@ -224,7 +228,11 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="打开 →"
+            android:contentDescription="打开课程表"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:gravity="center"
+            android:text="打开"
             android:textColor="@color/widget_open_btn"
             android:textSize="11sp"
         />
