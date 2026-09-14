@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -82,6 +83,9 @@ class CourseProvider extends ChangeNotifier {
   final CourseSettingsStore _courseSettingsStore = CourseSettingsStore();
   final CourseSyncManager _courseSyncManager = CourseSyncManager();
   final CourseTransferManager _courseTransferManager = CourseTransferManager();
+  Timer? _widgetUpdateTimer;
+  int _widgetUpdateGeneration = 0;
+  bool _widgetUpdateInFlight = false;
 
   CourseProvider() {
     _loadAppSettings();
@@ -470,6 +474,21 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> _updateWidgetsSafe() async {
+    _widgetUpdateGeneration++;
+    _widgetUpdateTimer?.cancel();
+    _widgetUpdateTimer = Timer(
+      const Duration(milliseconds: 180),
+      _flushWidgetUpdate,
+    );
+  }
+
+  Future<void> _flushWidgetUpdate() async {
+    if (_widgetUpdateInFlight) {
+      return;
+    }
+
+    _widgetUpdateInFlight = true;
+    final generation = _widgetUpdateGeneration;
     try {
       await WidgetSyncService.instance.updateTodayWidget(
         _courses,
@@ -481,6 +500,21 @@ class CourseProvider extends ChangeNotifier {
       );
     } catch (e) {
       debugPrint('Widget update error: $e');
+    } finally {
+      _widgetUpdateInFlight = false;
+      if (generation != _widgetUpdateGeneration) {
+        _widgetUpdateTimer?.cancel();
+        _widgetUpdateTimer = Timer(
+          const Duration(milliseconds: 180),
+          _flushWidgetUpdate,
+        );
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _widgetUpdateTimer?.cancel();
+    super.dispose();
   }
 }
