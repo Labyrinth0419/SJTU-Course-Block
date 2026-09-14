@@ -93,9 +93,14 @@ class CourseWidgetFactory(
         val rv    = RemoteViews(context.packageName, R.layout.widget_course_row)
         val color = WidgetColors.forCourse(item.name, theme, item.color)
 
-        rv.setTextViewText(R.id.row_title,  item.name)
-        rv.setTextViewText(R.id.row_detail, if (item.room.isNotEmpty()) "📍 ${item.room}" else "")
-        rv.setTextViewText(R.id.row_time,   item.timeRange)
+        rv.setTextViewText(R.id.row_title, item.name)
+        rv.setTextViewText(R.id.row_detail, if (item.room.isNotEmpty()) "地点：${item.room}" else "")
+        rv.setTextViewText(R.id.row_time, item.timeRange)
+        rv.setContentDescription(R.id.row_root, "${item.name}，点击打开课程表")
+        rv.setOnClickFillInIntent(
+            R.id.row_root,
+            Intent().putExtra("course_name", item.name),
+        )
         rv.setTextColor(R.id.row_title, theme.courseTitle)
         rv.setTextColor(R.id.row_detail, theme.courseDetail)
         rv.setInt(R.id.row_bar,  "setBackgroundColor", color)

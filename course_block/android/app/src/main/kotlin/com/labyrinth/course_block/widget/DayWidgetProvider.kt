@@ -65,6 +65,10 @@ class DayWidgetProvider : AppWidgetProvider() {
                     data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
                 }
                 views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
+                views.setPendingIntentTemplate(
+                    R.id.widget_list_view,
+                    courseClickPendingIntent(context, widgetId),
+                )
                 views.setEmptyView(R.id.widget_list_view, R.id.tv_empty)
 
                 // 刷新按钮
@@ -107,5 +111,17 @@ class DayWidgetProvider : AppWidgetProvider() {
                 } catch (_: Exception) {}
             }
         }
+    }
+
+    private fun courseClickPendingIntent(context: Context, widgetId: Int): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            widgetId + 10_000,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 }

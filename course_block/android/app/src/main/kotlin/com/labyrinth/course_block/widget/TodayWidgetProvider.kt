@@ -103,6 +103,10 @@ class TodayWidgetProvider : AppWidgetProvider() {
             data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
         }
         views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
+        views.setPendingIntentTemplate(
+            R.id.widget_list_view,
+            courseClickPendingIntent(context, widgetId),
+        )
         // 当列表为空时自动显示空状态视图
         views.setEmptyView(R.id.widget_list_view, R.id.tv_empty)
 
@@ -131,6 +135,18 @@ class TodayWidgetProvider : AppWidgetProvider() {
         } catch (e: Exception) {
             Log.e(TAG, "Could not create open PendingIntent", e)
         }
+    }
+
+    private fun courseClickPendingIntent(context: Context, widgetId: Int): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            widgetId + 10_000,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private fun attachRefreshIntent(context: Context, widgetId: Int, views: RemoteViews) {

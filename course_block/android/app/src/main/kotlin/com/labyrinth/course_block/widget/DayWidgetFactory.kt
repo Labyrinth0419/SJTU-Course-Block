@@ -72,6 +72,11 @@ class DayWidgetFactory(
 
         rv.setTextViewText(R.id.day_card_name, item.name)
         rv.setTextViewText(R.id.day_card_info, info)
+        rv.setContentDescription(R.id.day_card_root, "${item.name}，点击打开课程表")
+        rv.setOnClickFillInIntent(
+            R.id.day_card_root,
+            Intent().putExtra("course_name", item.name),
+        )
 
         when (item.status) {
             "done" -> {
