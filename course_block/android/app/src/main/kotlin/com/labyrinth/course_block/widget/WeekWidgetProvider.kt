@@ -6,14 +6,13 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
+import android.net.Uri
 import android.util.Log
 import android.widget.RemoteViews
 import com.labyrinth.course_block.MainActivity
 import com.labyrinth.course_block.R
-import org.json.JSONArray
 
-/** 【一周课程】桌面小组件 Provider：五栏网格展示本周工作日（Mon-Fri）课程。 */
+/** 【一周课程】桌面小组件：使用 RemoteViewsService 展示本周分组课程。 */
 class WeekWidgetProvider : AppWidgetProvider() {
 
     companion object {
@@ -23,10 +22,12 @@ class WeekWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == ACTION_REFRESH) {
-            Log.d(TAG, "ACTION_REFRESH received")
             val manager = AppWidgetManager.getInstance(context)
-            val ids = manager.getAppWidgetIds(ComponentName(context, WeekWidgetProvider::class.java))
+            val ids = manager.getAppWidgetIds(
+                ComponentName(context, WeekWidgetProvider::class.java),
+            )
             onUpdate(context, manager, ids)
+            ids.forEach { manager.notifyAppWidgetViewDataChanged(it, R.id.widget_list_view) }
         } else {
             super.onReceive(context, intent)
         }
@@ -35,124 +36,89 @@ class WeekWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
-        appWidgetIds: IntArray
+        appWidgetIds: IntArray,
     ) {
         WidgetDataRefresher.refresh(context)
         val prefs = context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
         val theme = WidgetColors.resolve(context, prefs)
+
         for (widgetId in appWidgetIds) {
             try {
                 val views = RemoteViews(context.packageName, R.layout.widget_week)
-                val header = prefs.getString("today_header", "一周课程") ?: "一周课程"
-                val subtitle = prefs.getString("today_subtitle", "") ?: ""
                 views.setInt(R.id.widget_root, "setBackgroundResource", theme.backgroundRes)
-                views.setTextViewText(R.id.tv_header, header)
-                views.setTextViewText(R.id.tv_subtitle, subtitle)
+                views.setTextViewText(
+                    R.id.tv_header,
+                    prefs.getString("today_header", "一周课程") ?: "一周课程",
+                )
+                views.setTextViewText(
+                    R.id.tv_subtitle,
+                    prefs.getString("today_subtitle", "") ?: "",
+                )
                 views.setTextColor(R.id.tv_header, theme.headerText)
                 views.setTextColor(R.id.tv_subtitle, theme.subtitleText)
+                views.setTextColor(R.id.tv_empty, theme.emptyText)
                 views.setTextColor(R.id.btn_refresh, theme.accent)
                 views.setTextColor(R.id.btn_open, theme.openText)
                 views.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
                 views.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
-                views.setInt(R.id.divider_v1, "setBackgroundColor", theme.divider)
-                views.setInt(R.id.divider_v2, "setBackgroundColor", theme.divider)
-                views.setInt(R.id.divider_v3, "setBackgroundColor", theme.divider)
-                views.setInt(R.id.divider_v4, "setBackgroundColor", theme.divider)
 
-                // RemoteViews.addView() is incremental. Clear old column children first,
-                // otherwise theme updates / manual refresh will append duplicate rows.
-                views.removeAllViews(R.id.col_week_1)
-                views.removeAllViews(R.id.col_week_2)
-                views.removeAllViews(R.id.col_week_3)
-                views.removeAllViews(R.id.col_week_4)
-                views.removeAllViews(R.id.col_week_5)
-
-                // ── 解析 week_list ──────────────────────────────────────────────────────────
-                val json = prefs.getString("week_list", "[]") ?: "[]"
-                val arr = JSONArray(json)
-
-                data class CourseRow(
-                    val name: String,
-                    val room: String,
-                    val timeRange: String,
-                    val color: String,
-                )
-
-                data class Group(val label: String, val courses: MutableList<CourseRow> = mutableListOf())
-
-                val groups = mutableListOf<Group>()
-                for (i in 0 until arr.length()) {
-                    val obj = arr.getJSONObject(i)
-                    when (obj.optString("t")) {
-                        "header" -> groups.add(Group(obj.optString("label", "")))
-                        "course" -> groups.lastOrNull()?.courses?.add(
-                            CourseRow(
-                                obj.optString("name", "--"),
-                                obj.optString("room", ""),
-                                obj.optString("timeRange", ""),
-                                obj.optString("color", ""),
-                            )
-                        )
-                    }
+                val serviceIntent = Intent(context, WeekWidgetService::class.java).apply {
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                    data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
                 }
-
-                // label 前3字符确定所属栏：Mon→1, Tue→2, Wed→3, Thu→4, Fri→5，周末跳过
-                fun columnId(label: String): Int = when {
-                    label.startsWith("Mon") -> R.id.col_week_1
-                    label.startsWith("Tue") -> R.id.col_week_2
-                    label.startsWith("Wed") -> R.id.col_week_3
-                    label.startsWith("Thu") -> R.id.col_week_4
-                    label.startsWith("Fri") -> R.id.col_week_5
-                    else -> -1 // Sat / Sun 跳过
-                }
-
-                for (group in groups) {
-                    val colId = columnId(group.label)
-                    if (colId == -1) continue
-
-                    // 日期标题行
-                    val headerRv = RemoteViews(context.packageName, R.layout.widget_group_header_row)
-                    headerRv.setTextViewText(R.id.row_header_label, group.label)
-                    headerRv.setTextColor(R.id.row_header_label, theme.accent)
-                    headerRv.setInt(R.id.row_header_divider, "setBackgroundColor", theme.divider)
-                    views.addView(colId, headerRv)
-
-                    // 课程卡片
-                    for (c in group.courses) {
-                        val rv = RemoteViews(context.packageName, R.layout.widget_mini_card)
-                        val color = WidgetColors.forCourse(c.name, theme, c.color)
-                        rv.setTextViewText(R.id.mini_name, c.name)
-                        rv.setTextViewText(R.id.mini_info, c.timeRange)
-                        rv.setTextColor(R.id.mini_name, theme.courseTitle)
-                        rv.setInt(R.id.mini_bar, "setBackgroundColor", color)
-                        rv.setTextColor(R.id.mini_info, color)
-                        views.addView(colId, rv)
-                    }
-                }
-
-                // 刷新按钮
-                val refreshPi = PendingIntent.getBroadcast(
-                    context, widgetId,
-                    Intent(context, WeekWidgetProvider::class.java).apply { action = ACTION_REFRESH },
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
+                views.setPendingIntentTemplate(
+                    R.id.widget_list_view,
+                    courseClickPendingIntent(context, widgetId),
                 )
-                views.setOnClickPendingIntent(R.id.btn_refresh, refreshPi)
-
-                // 打开 App
-                val openPi = PendingIntent.getActivity(
-                    context, 0,
-                    Intent(context, MainActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    },
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                views.setEmptyView(R.id.widget_list_view, R.id.tv_empty)
+                views.setOnClickPendingIntent(
+                    R.id.btn_refresh,
+                    refreshPendingIntent(context, widgetId),
                 )
-                views.setOnClickPendingIntent(R.id.btn_open, openPi)
+                views.setOnClickPendingIntent(R.id.btn_open, openPendingIntent(context))
 
                 appWidgetManager.updateAppWidget(widgetId, views)
-                Log.d(TAG, "Widget $widgetId updated (five-column)")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to update widget $widgetId", e)
+                appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list_view)
+            } catch (exception: Exception) {
+                Log.e(TAG, "Failed to update widget $widgetId", exception)
             }
         }
+    }
+
+    private fun refreshPendingIntent(context: Context, widgetId: Int): PendingIntent {
+        val intent = Intent(context, WeekWidgetProvider::class.java).apply {
+            action = ACTION_REFRESH
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            widgetId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun courseClickPendingIntent(context: Context, widgetId: Int): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            widgetId + 10_000,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun openPendingIntent(context: Context): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 }

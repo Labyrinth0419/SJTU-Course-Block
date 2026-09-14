@@ -31,7 +31,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="3.11  第3周  Wed"
+            android:text="3.11  第3周  周三"
             android:textColor="@color/widget_subtitle_text"
             android:textSize="10sp"
         />
