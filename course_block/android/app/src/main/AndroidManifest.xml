@@ -8,8 +8,7 @@
     <application
         android:label="课程表"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:icon="@mipmap/ic_launcher">
         <!-- 关闭 Impeller，回退到 Skia 渲染后端。Impeller/Vulkan 在本机型上
              光栅化课程卡的模糊阴影/逐卡 layer 合成时开销过高，导致翻页掉帧
              （实测 Raster p90 ~18ms、jank 10%）；Skia 下同样代码 Raster p90
