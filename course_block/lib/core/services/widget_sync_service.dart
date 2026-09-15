@@ -15,13 +15,13 @@ class WidgetSyncService {
 
   static const List<String> _weekdaysShort = [
     '', // index 0 unused
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
+    '周一',
+    '周二',
+    '周三',
+    '周四',
+    '周五',
+    '周六',
+    '周日',
   ];
 
   /// Push today's courses to the Android home widget.
@@ -141,9 +141,9 @@ class WidgetSyncService {
       if (dayCourses.isEmpty) continue;
 
       final dayLabel = offset == 0
-          ? 'Today ${date.month}.${date.day}'
+          ? '今天 ${date.month}.${date.day}'
           : offset == 1
-          ? 'Tmr ${date.month}.${date.day}'
+          ? '明天 ${date.month}.${date.day}'
           : '${_weekdaysShort[date.weekday]} ${date.month}.${date.day}';
       upcomingItems.add({'t': 'header', 'label': dayLabel});
       for (final c in dayCourses) {

@@ -16,7 +16,7 @@ object WidgetDataRefresher {
     private const val SNAPSHOT_VERSION = 1
     private const val MILLIS_PER_DAY = 86_400_000L
 
-    private val weekdaysShort = arrayOf("", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    private val weekdaysShort = arrayOf("", "周一", "周二", "周三", "周四", "周五", "周六", "周日")
     private val utc = TimeZone.getTimeZone("UTC")
 
     private data class ScheduleSnapshot(
@@ -151,8 +151,8 @@ object WidgetDataRefresher {
             if (dayCourses.isEmpty()) continue
 
             val label = when (offset) {
-                0 -> "Today ${parts.month}.${parts.day}"
-                1 -> "Tmr ${parts.month}.${parts.day}"
+                0 -> "今天 ${parts.month}.${parts.day}"
+                1 -> "明天 ${parts.month}.${parts.day}"
                 else -> "${weekdaysShort[parts.weekday]} ${parts.month}.${parts.day}"
             }
             upcomingPayload.put(JSONObject().put("t", "header").put("label", label))

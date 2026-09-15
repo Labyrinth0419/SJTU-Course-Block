@@ -1,6 +1,7 @@
 package com.labyrinth.course_block.widget
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
@@ -91,8 +92,13 @@ class ScrollGroupWidgetFactory(
                 val rv = RemoteViews(context.packageName, R.layout.widget_course_row)
                 val color = WidgetColors.forCourse(row.name, theme, row.color)
                 rv.setTextViewText(R.id.row_title, row.name)
-                rv.setTextViewText(R.id.row_detail, if (row.room.isNotEmpty()) "📍 ${row.room}" else "")
+                rv.setTextViewText(R.id.row_detail, if (row.room.isNotEmpty()) "地点：${row.room}" else "")
                 rv.setTextViewText(R.id.row_time, row.timeRange)
+                rv.setContentDescription(R.id.row_root, "${row.name}，点击打开课程表")
+                rv.setOnClickFillInIntent(
+                    R.id.row_root,
+                    Intent().putExtra("course_name", row.name),
+                )
                 rv.setTextColor(R.id.row_title, theme.courseTitle)
                 rv.setTextColor(R.id.row_detail, theme.courseDetail)
                 rv.setInt(R.id.row_bar, "setBackgroundColor", color)

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../services/course_schedule_manager.dart';
 import '../services/course_settings_store.dart';
 import '../services/course_sync_manager.dart';
 import '../services/course_transfer_manager.dart';
+import '../services/performance_test_data_service.dart';
 import '../services/widget_sync_service.dart';
 import '../utils/time_slots.dart';
 
@@ -82,6 +84,11 @@ class CourseProvider extends ChangeNotifier {
   final CourseSettingsStore _courseSettingsStore = CourseSettingsStore();
   final CourseSyncManager _courseSyncManager = CourseSyncManager();
   final CourseTransferManager _courseTransferManager = CourseTransferManager();
+  final PerformanceTestDataService _performanceTestDataService =
+      PerformanceTestDataService();
+  Timer? _widgetUpdateTimer;
+  int _widgetUpdateGeneration = 0;
+  bool _widgetUpdateInFlight = false;
 
   CourseProvider() {
     _loadAppSettings();
@@ -396,6 +403,12 @@ class CourseProvider extends ChangeNotifier {
     await loadCourses();
   }
 
+  Future<PerformanceTestDataResult> generatePerformanceTestData() async {
+    final result = await _performanceTestDataService.replaceWithLargeDataset();
+    await loadCourses();
+    return result;
+  }
+
   Future<void> updateSchedule(Schedule schedule) async {
     await _courseScheduleManager.updateSchedule(schedule);
     await loadCourses();
@@ -470,6 +483,21 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> _updateWidgetsSafe() async {
+    _widgetUpdateGeneration++;
+    _widgetUpdateTimer?.cancel();
+    _widgetUpdateTimer = Timer(
+      const Duration(milliseconds: 180),
+      _flushWidgetUpdate,
+    );
+  }
+
+  Future<void> _flushWidgetUpdate() async {
+    if (_widgetUpdateInFlight) {
+      return;
+    }
+
+    _widgetUpdateInFlight = true;
+    final generation = _widgetUpdateGeneration;
     try {
       await WidgetSyncService.instance.updateTodayWidget(
         _courses,
@@ -481,6 +509,21 @@ class CourseProvider extends ChangeNotifier {
       );
     } catch (e) {
       debugPrint('Widget update error: $e');
+    } finally {
+      _widgetUpdateInFlight = false;
+      if (generation != _widgetUpdateGeneration) {
+        _widgetUpdateTimer?.cancel();
+        _widgetUpdateTimer = Timer(
+          const Duration(milliseconds: 180),
+          _flushWidgetUpdate,
+        );
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _widgetUpdateTimer?.cancel();
+    super.dispose();
   }
 }

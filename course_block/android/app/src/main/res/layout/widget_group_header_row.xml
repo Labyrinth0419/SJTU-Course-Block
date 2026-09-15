@@ -14,7 +14,7 @@
         android:id="@+id/row_header_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Mon"
+        android:text="周一"
         android:textColor="@color/widget_accent"
         android:textSize="10sp"
         android:textStyle="bold"

@@ -81,10 +81,7 @@ class CourseService {
         AcademicLoginSystem.undergraduate,
       );
       if (cookies.trim().isEmpty) {
-        return const CourseFetchResult(
-          sourceSystem: AcademicLoginSystem.undergraduate,
-          courses: [],
-        );
+        throw const AcademicLoginRequiredException();
       }
 
       _dio.options.headers['Cookie'] = cookies;
@@ -101,28 +98,32 @@ class CourseService {
         data: {'xnm': year, 'xqm': xqm},
       );
 
-      if (response.statusCode == 200) {
-        final json = _decodeJsonMap(response.data);
-        final kbList = json?['kbList'];
-        if (kbList is List) {
-          return CourseFetchResult(
-            sourceSystem: AcademicLoginSystem.undergraduate,
-            courses: kbList
-                .whereType<Map<String, dynamic>>()
-                .map(
-                  (item) => _parseUndergraduateCourse(item, courseColorPalette),
-                )
-                .toList(),
-          );
-        }
+      if (response.statusCode != 200) {
+        return _undergraduateFailure(
+          '教务系统返回异常状态码 ${response.statusCode ?? '未知'}。',
+        );
       }
+
+      final json = _decodeJsonMap(response.data);
+      final kbList = json?['kbList'];
+      if (kbList is! List) {
+        return _undergraduateFailure('教务系统返回的数据格式无法识别。');
+      }
+
+      return CourseFetchResult(
+        sourceSystem: AcademicLoginSystem.undergraduate,
+        courses: kbList
+            .whereType<Map<String, dynamic>>()
+            .map((item) => _parseUndergraduateCourse(item, courseColorPalette))
+            .toList(),
+      );
     } catch (e) {
+      if (e is CourseSyncException) {
+        rethrow;
+      }
       debugPrint('Error fetching undergraduate courses: $e');
+      return _undergraduateFailure('本科教务系统请求失败：${_formatError(e)}');
     }
-    return const CourseFetchResult(
-      sourceSystem: AcademicLoginSystem.undergraduate,
-      courses: [],
-    );
   }
 
   Future<CourseFetchResult> fetchGraduateCourses(
@@ -282,6 +283,23 @@ class CourseService {
       ),
       isVirtual: (json['xkbz'] as String? ?? '').contains('虚拟'),
     );
+  }
+
+  CourseFetchResult _undergraduateFailure(String reason) {
+    return CourseFetchResult(
+      sourceSystem: AcademicLoginSystem.undergraduate,
+      courses: const [],
+      notes: const ['本科同步未完成，原有课表未被清空。'],
+      failures: [CourseOperationFailure(label: '本科同步', reason: reason)],
+    );
+  }
+
+  String _formatError(Object error) {
+    final message = error
+        .toString()
+        .replaceFirst(RegExp(r'^(Exception|Error):\\s*'), '')
+        .trim();
+    return message.isEmpty ? '未知错误' : message;
   }
 
   String? _stringOf(dynamic value) {
