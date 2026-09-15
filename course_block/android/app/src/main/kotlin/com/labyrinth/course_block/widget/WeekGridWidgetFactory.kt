@@ -69,8 +69,22 @@ class WeekGridWidgetFactory(private val context: Context) : RemoteViewsService.R
             cells = emptyList()
             return
         }
+        // Defensive normalization: older snapshots could contain the same day/course
+        // block more than once after switching schedules. Merge identical day headers
+        // and remove duplicate course rows before building GridView cells.
+        val normalizedGroups = groups
+            .groupBy { it.label }
+            .values
+            .map { sameLabel ->
+                val first = sameLabel.first()
+                Group(
+                    first.label,
+                    sameLabel.flatMap { it.courses }
+                        .distinctBy { Triple(it.name, it.time, it.room) },
+                )
+            }
         val dayChunks = List(5) { day ->
-            groups.filter { it.label.startsWith("周" + (day + 1).toChineseDay()) }
+            normalizedGroups.filter { it.label.startsWith("周" + (day + 1).toChineseDay()) }
                 .flatMap { group ->
                     if (group.courses.isEmpty()) listOf(group)
                     else group.courses.chunked(4).mapIndexed { index, chunk ->
