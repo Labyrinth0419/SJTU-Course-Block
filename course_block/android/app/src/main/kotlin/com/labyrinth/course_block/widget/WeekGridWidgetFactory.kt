@@ -12,13 +12,13 @@ class WeekGridWidgetFactory(private val context: Context) : RemoteViewsService.R
     private data class Course(val name: String, val room: String, val time: String, val color: String)
     private data class Group(val label: String, val courses: List<Course>)
 
-    private var columns: List<List<Group>> = List(5) { emptyList() }
+    private var cells: List<List<Group>> = emptyList()
     private lateinit var theme: WidgetColors.WidgetTheme
 
     override fun onCreate() = loadData()
     override fun onDataSetChanged() = loadData()
-    override fun onDestroy() { columns = List(5) { emptyList() } }
-    override fun getCount() = 5
+    override fun onDestroy() { cells = emptyList() }
+    override fun getCount() = cells.size
     override fun getItemId(position: Int) = position.toLong()
     override fun hasStableIds() = true
     override fun getViewTypeCount() = 1
@@ -26,7 +26,7 @@ class WeekGridWidgetFactory(private val context: Context) : RemoteViewsService.R
 
     override fun getViewAt(position: Int): RemoteViews {
         val view = RemoteViews(context.packageName, R.layout.widget_week_column)
-        val dayGroups = columns.getOrNull(position).orEmpty()
+        val dayGroups = cells.getOrNull(position).orEmpty()
         for (group in dayGroups) {
             val header = RemoteViews(context.packageName, R.layout.widget_group_header_row)
             header.setTextViewText(R.id.row_header_label, group.label)
@@ -66,10 +66,22 @@ class WeekGridWidgetFactory(private val context: Context) : RemoteViewsService.R
             }
             current?.let { groups.add(it.build()) }
         } catch (_: Exception) {
-            columns = List(5) { emptyList() }
+            cells = emptyList()
             return
         }
-        columns = List(5) { day -> groups.filter { it.label.startsWith("周" + (day + 1).toChineseDay()) } }
+        val dayChunks = List(5) { day ->
+            groups.filter { it.label.startsWith("周" + (day + 1).toChineseDay()) }
+                .flatMap { group ->
+                    if (group.courses.isEmpty()) listOf(group)
+                    else group.courses.chunked(4).mapIndexed { index, chunk ->
+                        Group(if (index == 0) group.label else "", chunk)
+                    }
+                }
+        }
+        val rowCount = dayChunks.maxOfOrNull { it.size } ?: 0
+        cells = (0 until rowCount).flatMap { row ->
+            (0 until 5).map { day -> listOfNotNull(dayChunks[day].getOrNull(row)) }
+        }
     }
 
     private class GroupBuilder(private val label: String) {
