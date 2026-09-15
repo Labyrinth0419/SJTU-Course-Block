@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- JAccount 当前登录回调仍可能返回 HTTP；仅对该域名保留兼容，不放开全局明文流量。 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain>i.sjtu.edu.cn</domain>
+    </domain-config>
+</network-security-config>
