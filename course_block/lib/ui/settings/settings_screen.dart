@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -122,6 +123,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _generatePerformanceTestData() async {
+    final provider = context.read<CourseProvider>();
+    try {
+      final result = await provider.generatePerformanceTestData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '已生成并导入 ${result.scheduleCount} 个测试课表、'
+            '${result.courseCount} 门课程',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('生成测试数据失败：$error')));
+    }
+  }
+
   Future<void> _handleLoginAction(BuildContext context) async {
     if (_userInfo == null) {
       await Navigator.push(
@@ -205,6 +227,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
+          if (kDebugMode) ...[
+            const SizedBox(height: 12),
+            _buildSectionCard(
+              context,
+              title: '开发与性能测试',
+              children: [
+                _buildActionTile(
+                  context,
+                  icon: Icons.speed,
+                  title: '生成大课表测试数据',
+                  subtitle: '生成 10 个课表、约 1500 门课程并导入当前数据库',
+                  onTap: _generatePerformanceTestData,
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

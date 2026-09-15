@@ -12,6 +12,7 @@ import '../services/course_schedule_manager.dart';
 import '../services/course_settings_store.dart';
 import '../services/course_sync_manager.dart';
 import '../services/course_transfer_manager.dart';
+import '../services/performance_test_data_service.dart';
 import '../services/widget_sync_service.dart';
 import '../utils/time_slots.dart';
 
@@ -83,6 +84,8 @@ class CourseProvider extends ChangeNotifier {
   final CourseSettingsStore _courseSettingsStore = CourseSettingsStore();
   final CourseSyncManager _courseSyncManager = CourseSyncManager();
   final CourseTransferManager _courseTransferManager = CourseTransferManager();
+  final PerformanceTestDataService _performanceTestDataService =
+      PerformanceTestDataService();
   Timer? _widgetUpdateTimer;
   int _widgetUpdateGeneration = 0;
   bool _widgetUpdateInFlight = false;
@@ -398,6 +401,12 @@ class CourseProvider extends ChangeNotifier {
     await _courseScheduleManager.deleteSchedule(scheduleId);
     await _deleteScheduleSettings(scheduleId);
     await loadCourses();
+  }
+
+  Future<PerformanceTestDataResult> generatePerformanceTestData() async {
+    final result = await _performanceTestDataService.replaceWithLargeDataset();
+    await loadCourses();
+    return result;
   }
 
   Future<void> updateSchedule(Schedule schedule) async {
