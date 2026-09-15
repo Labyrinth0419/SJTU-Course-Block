@@ -71,10 +71,8 @@ class WeekWidgetProvider : AppWidgetProvider() {
                 columns.forEach { views.removeAllViews(it) }
                 addWeekColumns(context, views, prefs, theme, columns, widgetId)
 
-                views.setOnClickPendingIntent(
-                    R.id.widget_root,
-                    openPendingIntent(context, widgetId),
-                )
+                // Do not attach a click PendingIntent to the root: on some launchers it
+                // consumes touch gestures before the weekly ScrollView can scroll.
                 views.setOnClickPendingIntent(
                     R.id.tv_header,
                     refreshPendingIntent(context, widgetId),
