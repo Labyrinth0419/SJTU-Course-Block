@@ -12,7 +12,7 @@
     android:paddingBottom="8dp"
 >
 
-    <!-- 紧凑头部：课表名 · 周次日期（单行，刷新移至左下角） -->
+    <!-- 点击顶部标题刷新，点击小组件主体打开 App。 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -25,6 +25,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:contentDescription="点击刷新课程"
             android:ellipsize="end"
             android:maxLines="1"
             android:text="今日课程"
@@ -80,55 +81,5 @@
         android:visibility="gone"
     />
 
-    <!-- 底部分割线 -->
-    <TextView
-        android:id="@+id/divider_bottom"
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginBottom="4dp"
-        android:background="@color/widget_divider"
-    />
-
-    <!-- 底部操作行：刷新（左）+ 打开应用（右） -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-    >
-
-        <TextView
-            android:id="@+id/btn_refresh"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:contentDescription="刷新课程"
-            android:minWidth="48dp"
-            android:minHeight="48dp"
-            android:gravity="center"
-            android:text="刷新"
-            android:textColor="@color/widget_accent"
-            android:textSize="11sp"
-        />
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-        />
-
-        <TextView
-            android:id="@+id/btn_open"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:contentDescription="打开课程表"
-            android:minWidth="48dp"
-            android:minHeight="48dp"
-            android:gravity="center"
-            android:text="打开"
-            android:textColor="@color/widget_open_btn"
-            android:textSize="11sp"
-        />
-
-    </LinearLayout>
-
+    <!-- 点击课程表主体打开 App；点击顶部标题刷新数据。 -->
 </LinearLayout>

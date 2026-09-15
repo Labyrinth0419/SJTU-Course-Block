@@ -57,10 +57,7 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
                 views.setTextColor(R.id.tv_header, theme.headerText)
                 views.setTextColor(R.id.tv_subtitle, theme.subtitleText)
                 views.setTextColor(R.id.tv_empty, theme.emptyText)
-                views.setTextColor(R.id.btn_refresh, theme.accent)
-                views.setTextColor(R.id.btn_open, theme.openText)
                 views.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
-                views.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
 
                 val serviceIntent = Intent(context, UpcomingWidgetService::class.java).apply {
                     putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
@@ -73,10 +70,10 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
                 )
                 views.setEmptyView(R.id.widget_list_view, R.id.tv_empty)
                 views.setOnClickPendingIntent(
-                    R.id.btn_refresh,
+                    R.id.tv_header,
                     refreshPendingIntent(context, widgetId),
                 )
-                views.setOnClickPendingIntent(R.id.btn_open, openPendingIntent(context))
+                views.setOnClickPendingIntent(R.id.widget_root, openPendingIntent(context))
 
                 appWidgetManager.updateAppWidget(widgetId, views)
                 appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list_view)

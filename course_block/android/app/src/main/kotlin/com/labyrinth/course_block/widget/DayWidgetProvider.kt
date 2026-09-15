@@ -55,10 +55,7 @@ class DayWidgetProvider : AppWidgetProvider() {
                 views.setTextColor(R.id.tv_header, theme.headerText)
                 views.setTextColor(R.id.tv_subtitle, theme.subtitleText)
                 views.setTextColor(R.id.tv_empty, theme.emptyText)
-                views.setTextColor(R.id.btn_refresh, theme.accent)
-                views.setTextColor(R.id.btn_open, theme.openText)
                 views.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
-                views.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
 
                 val serviceIntent = Intent(context, DayWidgetService::class.java).apply {
                     putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
@@ -71,23 +68,14 @@ class DayWidgetProvider : AppWidgetProvider() {
                 )
                 views.setEmptyView(R.id.widget_list_view, R.id.tv_empty)
 
-                // 刷新按钮
-                val refreshPi = PendingIntent.getBroadcast(
-                    context, widgetId,
-                    Intent(context, DayWidgetProvider::class.java).apply { action = ACTION_REFRESH },
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                views.setOnClickPendingIntent(
+                    R.id.widget_root,
+                    openPendingIntent(context, widgetId),
                 )
-                views.setOnClickPendingIntent(R.id.btn_refresh, refreshPi)
-
-                // 打开 App
-                val openPi = PendingIntent.getActivity(
-                    context, 0,
-                    Intent(context, MainActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    },
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                views.setOnClickPendingIntent(
+                    R.id.tv_header,
+                    refreshPendingIntent(context, widgetId),
                 )
-                views.setOnClickPendingIntent(R.id.btn_open, openPi)
 
                 appWidgetManager.updateAppWidget(widgetId, views)
                 appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list_view)
@@ -101,16 +89,37 @@ class DayWidgetProvider : AppWidgetProvider() {
                     fb.setTextColor(R.id.tv_header, theme.headerText)
                     fb.setTextColor(R.id.tv_subtitle, theme.subtitleText)
                     fb.setTextColor(R.id.tv_empty, theme.emptyText)
-                    fb.setTextColor(R.id.btn_refresh, theme.accent)
-                    fb.setTextColor(R.id.btn_open, theme.openText)
                     fb.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
-                    fb.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
                     fb.setViewVisibility(R.id.tv_empty,         View.VISIBLE)
                     fb.setViewVisibility(R.id.widget_list_view, View.GONE)
                     appWidgetManager.updateAppWidget(widgetId, fb)
                 } catch (_: Exception) {}
             }
         }
+    }
+
+    private fun refreshPendingIntent(context: Context, widgetId: Int): PendingIntent {
+        val intent = Intent(context, DayWidgetProvider::class.java).apply {
+            action = ACTION_REFRESH
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            widgetId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun openPendingIntent(context: Context, widgetId: Int): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            widgetId + 10_000,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private fun courseClickPendingIntent(context: Context, widgetId: Int): PendingIntent {

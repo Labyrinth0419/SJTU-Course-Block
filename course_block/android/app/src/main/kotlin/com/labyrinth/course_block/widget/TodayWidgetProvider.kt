@@ -91,10 +91,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
         views.setTextColor(R.id.tv_header, theme.headerText)
         views.setTextColor(R.id.tv_subtitle, theme.subtitleText)
         views.setTextColor(R.id.tv_empty, theme.emptyText)
-        views.setTextColor(R.id.btn_refresh, theme.accent)
-        views.setTextColor(R.id.btn_open, theme.openText)
         views.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
-        views.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
 
         // 绑定可滚动 ListView 适配器
         // 每个 widgetId 使用独立 URI，避免多实例时 PendingIntent 被复用
@@ -131,7 +128,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 context, 0, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.btn_open, pi)
+            views.setOnClickPendingIntent(R.id.widget_root, pi)
         } catch (e: Exception) {
             Log.e(TAG, "Could not create open PendingIntent", e)
         }
@@ -159,7 +156,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 context, widgetId, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.btn_refresh, pi)
+            views.setOnClickPendingIntent(R.id.tv_header, pi)
         } catch (e: Exception) {
             Log.e(TAG, "Could not create refresh PendingIntent", e)
         }
@@ -184,10 +181,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
             fallback.setTextColor(R.id.tv_header, theme.headerText)
             fallback.setTextColor(R.id.tv_subtitle, theme.subtitleText)
             fallback.setTextColor(R.id.tv_empty, theme.emptyText)
-            fallback.setTextColor(R.id.btn_refresh, theme.accent)
-            fallback.setTextColor(R.id.btn_open, theme.openText)
             fallback.setInt(R.id.divider_top, "setBackgroundColor", theme.divider)
-            fallback.setInt(R.id.divider_bottom, "setBackgroundColor", theme.divider)
             fallback.setViewVisibility(R.id.tv_empty,        View.VISIBLE)
             fallback.setViewVisibility(R.id.widget_list_view, View.GONE)
             attachOpenIntent(context, fallback)
