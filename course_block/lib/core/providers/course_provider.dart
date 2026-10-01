@@ -525,6 +525,7 @@ class CourseProvider extends ChangeNotifier {
     return _courseTransferManager.importToSystemCalendar(
       _courses,
       _currentSchedule?.startDate,
+      scheduleId: _currentSchedule?.id,
     );
   }
 

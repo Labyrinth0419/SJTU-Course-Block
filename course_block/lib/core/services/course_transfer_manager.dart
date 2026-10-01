@@ -113,12 +113,17 @@ class CourseTransferManager {
 
   Future<int> importToSystemCalendar(
     List<Course> courses,
-    DateTime? startDate,
-  ) async {
+    DateTime? startDate, {
+    int? scheduleId,
+  }) async {
     if (startDate == null) {
       return 0;
     }
-    return _calendarService.importCourses(courses, startDate);
+    return _calendarService.importCourses(
+      courses,
+      startDate,
+      scheduleId: scheduleId,
+    );
   }
 
   Future<bool> shareCoursesIcs(
