@@ -24,11 +24,45 @@ class CourseTransferManager {
   final DatabaseHelper _databaseHelper;
   final CalendarService _calendarService;
 
+  static const _portableJsonFields = [
+    'courseId',
+    'courseName',
+    'teacher',
+    'classRoom',
+    'startWeek',
+    'endWeek',
+    'dayOfWeek',
+    'startNode',
+    'step',
+    'isOddWeek',
+    'isEvenWeek',
+    'weekCode',
+    'color',
+    'isVirtual',
+  ];
+
+  Map<String, dynamic> _portableCourseJson(Course course) => {
+    'courseId': course.courseId,
+    'courseName': course.courseName,
+    'teacher': course.teacher,
+    'classRoom': course.classRoom,
+    'startWeek': course.startWeek,
+    'endWeek': course.endWeek,
+    'dayOfWeek': course.dayOfWeek,
+    'startNode': course.startNode,
+    'step': course.step,
+    'isOddWeek': course.isOddWeek ? 1 : 0,
+    'isEvenWeek': course.isEvenWeek ? 1 : 0,
+    'weekCode': course.weekCode,
+    'color': course.color,
+    'isVirtual': course.isVirtual ? 1 : 0,
+  };
+
   Future<String> exportCoursesJson(
     List<Course> courses, [
     String? targetPath,
   ]) async {
-    final list = courses.map((c) => c.toMap()).toList();
+    final list = courses.map(_portableCourseJson).toList();
     if (targetPath != null && targetPath.isNotEmpty) {
       final file = File(targetPath);
       await file.writeAsString(JsonEncoder.withIndent('  ').convert(list));
@@ -61,7 +95,7 @@ class CourseTransferManager {
   }
 
   Future<Uint8List> exportCoursesJsonBytes(List<Course> courses) async {
-    final list = courses.map((c) => c.toMap()).toList();
+    final list = courses.map(_portableCourseJson).toList();
     final str = JsonEncoder.withIndent('  ').convert(list);
     return Uint8List.fromList(utf8.encode(str));
   }
@@ -146,9 +180,12 @@ class CourseTransferManager {
           if (item is! Map<String, dynamic>) {
             throw const FormatException('这一项不是课程对象');
           }
-          final course = Course.fromMap(item);
-          final newCourse = course.copyWith(scheduleId: scheduleId);
-          await _databaseHelper.insertCourse(newCourse);
+          final course = Course.fromMap({
+            for (final key in _portableJsonFields)
+              if (item.containsKey(key)) key: item[key],
+            'scheduleId': scheduleId,
+          });
+          await _databaseHelper.insertCourse(course);
           inserted++;
         } catch (e) {
           failures.add(
