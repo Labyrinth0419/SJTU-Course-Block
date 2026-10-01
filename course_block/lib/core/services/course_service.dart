@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -17,6 +18,11 @@ class CourseSyncException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class CourseRequestTimeoutException extends CourseSyncException {
+  const CourseRequestTimeoutException(String source)
+    : super('$source请求超时，请稍后重试。');
 }
 
 class AcademicLoginRequiredException extends CourseSyncException {
@@ -53,6 +59,21 @@ class CourseFetchResult {
 }
 
 class CourseService {
+  CourseService({
+    Dio? dio,
+    Duration connectTimeout = const Duration(seconds: 15),
+    Duration sendTimeout = const Duration(seconds: 15),
+    Duration receiveTimeout = const Duration(seconds: 20),
+    this.requestTimeout = const Duration(seconds: 45),
+  }) : _dio = dio ?? Dio() {
+    _dio.options
+      ..connectTimeout = connectTimeout
+      ..sendTimeout = sendTimeout
+      ..receiveTimeout = receiveTimeout;
+  }
+
+  final Duration requestTimeout;
+
   static const String _ugCourseUrl =
       'https://i.sjtu.edu.cn/kbcx/xskbcx_cxXsKb.html';
   static const String _gradCourseUrl =
@@ -60,7 +81,7 @@ class CourseService {
   static const String _gradReferer =
       'https://yjs.sjtu.edu.cn/gsapp/sys/wdkbapp/*default/index.do?THEME=indigo&EMAP_LANG=zh#/xskcb';
 
-  final Dio _dio = Dio();
+  final Dio _dio;
   final GraduateCourseParser _graduateCourseParser =
       const GraduateCourseParser();
 
@@ -93,9 +114,10 @@ class CourseService {
           'https://i.sjtu.edu.cn/kbcx/xskbcx_cxXskbcxIndex.html?gnmkdm=N2151&layout=default';
       _dio.options.contentType = Headers.formUrlEncodedContentType;
 
-      final response = await _dio.post<dynamic>(
+      final response = await _postWithDeadline(
         _ugCourseUrl,
         data: {'xnm': year, 'xqm': xqm},
+        source: '本科教务系统',
       );
 
       if (response.statusCode != 200) {
@@ -118,6 +140,9 @@ class CourseService {
             .toList(),
       );
     } catch (e) {
+      if (e is CourseRequestTimeoutException) {
+        return _undergraduateFailure(e.message);
+      }
       if (e is CourseSyncException) {
         rethrow;
       }
@@ -139,8 +164,9 @@ class CourseService {
     }
 
     final requestedXnxqdm = _graduateCourseParser.convertYearTerm(year, term);
-    final response = await _dio.post<dynamic>(
+    final response = await _postWithDeadline(
       '$_gradCourseUrl?_=${DateTime.now().millisecondsSinceEpoch}',
+      source: '研究生教务系统',
       data: {
         'XNXQDM': requestedXnxqdm,
         'XH': '',
@@ -201,6 +227,35 @@ class CourseService {
     }
 
     throw GraduateScheduleParsingPendingException(courseCount: rows.length);
+  }
+
+  Future<Response<dynamic>> _postWithDeadline(
+    String url, {
+    required Map<String, String> data,
+    required String source,
+    Options? options,
+  }) async {
+    final cancellation = CancelToken();
+    // Dio's phase timeouts do not bound a response that keeps making progress.
+    final deadline = Timer(requestTimeout, () => cancellation.cancel());
+    try {
+      return await _dio.post<dynamic>(
+        url,
+        data: data,
+        options: options,
+        cancelToken: cancellation,
+      );
+    } on DioException catch (error) {
+      if (cancellation.isCancelled ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        throw CourseRequestTimeoutException(source);
+      }
+      rethrow;
+    } finally {
+      deadline.cancel();
+    }
   }
 
   Map<String, dynamic>? _decodeJsonMap(dynamic data) {
