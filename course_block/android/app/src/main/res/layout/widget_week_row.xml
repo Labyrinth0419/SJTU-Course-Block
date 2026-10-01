@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal">
+    <LinearLayout android:id="@+id/week_row_col_1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingEnd="2dp" />
+    <TextView android:layout_width="1dp" android:layout_height="match_parent" android:background="@color/widget_divider" />
+    <LinearLayout android:id="@+id/week_row_col_2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingStart="2dp" android:paddingEnd="2dp" />
+    <TextView android:layout_width="1dp" android:layout_height="match_parent" android:background="@color/widget_divider" />
+    <LinearLayout android:id="@+id/week_row_col_3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingStart="2dp" android:paddingEnd="2dp" />
+    <TextView android:layout_width="1dp" android:layout_height="match_parent" android:background="@color/widget_divider" />
+    <LinearLayout android:id="@+id/week_row_col_4" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingStart="2dp" android:paddingEnd="2dp" />
+    <TextView android:layout_width="1dp" android:layout_height="match_parent" android:background="@color/widget_divider" />
+    <LinearLayout android:id="@+id/week_row_col_5" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingStart="2dp" />
+</LinearLayout>

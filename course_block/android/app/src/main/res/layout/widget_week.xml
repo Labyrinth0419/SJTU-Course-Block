@@ -48,14 +48,12 @@
         android:layout_marginBottom="3dp"
         android:background="@color/widget_divider" />
 
-    <GridView
-        android:id="@+id/week_grid"
+    <ListView
+        android:id="@+id/week_list_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:horizontalSpacing="1dp"
-        android:numColumns="5"
-        android:stretchMode="columnWidth"
-        android:verticalSpacing="0dp"
+        android:divider="@null"
+        android:dividerHeight="0dp"
         android:scrollbars="vertical" />
 </LinearLayout>
