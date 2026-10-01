@@ -5,9 +5,19 @@ import '../models/schedule.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
-  static Database? _database;
+  Database? _database;
 
   DatabaseHelper._init();
+
+  // Allows service/widget tests to supply an isolated persistence implementation.
+  DatabaseHelper.forTesting();
+
+  static const courseProvenanceMigrationSql = <String>[
+    "ALTER TABLE courses ADD COLUMN sourceSystem TEXT NOT NULL DEFAULT 'legacy'",
+    'ALTER TABLE courses ADD COLUMN remoteCourseKey TEXT',
+    'ALTER TABLE courses ADD COLUMN remoteBaseline TEXT',
+    'ALTER TABLE courses ADD COLUMN editedFields TEXT',
+  ];
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -19,7 +29,12 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+    return await openDatabase(
+      path,
+      version: 2,
+      onCreate: _createDB,
+      onUpgrade: _upgradeDB,
+    );
   }
 
   Future _createDB(Database db, int version) async {
@@ -52,11 +67,22 @@ class DatabaseHelper {
       weekCode TEXT,
       color TEXT,
       isVirtual INTEGER NOT NULL DEFAULT 0,
+      sourceSystem TEXT NOT NULL DEFAULT 'local',
+      remoteCourseKey TEXT,
+      remoteBaseline TEXT,
+      editedFields TEXT,
       FOREIGN KEY (scheduleId) REFERENCES schedules (id) ON DELETE CASCADE
     )
     ''');
   }
 
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      for (final statement in courseProvenanceMigrationSql) {
+        await db.execute(statement);
+      }
+    }
+  }
 
   Future<int> insertSchedule(Schedule schedule) async {
     final db = await instance.database;
@@ -117,7 +143,6 @@ class DatabaseHelper {
       );
     });
   }
-
 
   Future<int> insertCourse(Course course) async {
     final db = await instance.database;

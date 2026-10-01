@@ -7,9 +7,10 @@ import '../../core/providers/course_provider.dart';
 import '../../core/theme/app_theme.dart';
 
 class AddCourseScreen extends StatefulWidget {
-  const AddCourseScreen({super.key, this.course});
+  const AddCourseScreen({super.key, this.course, this.databaseHelper});
 
   final Course? course;
+  final DatabaseHelper? databaseHelper;
 
   @override
   State<AddCourseScreen> createState() => _AddCourseScreenState();
@@ -410,28 +411,51 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
     final provider = context.read<CourseProvider>();
     final scheduleId = provider.currentSchedule?.id;
     final colorValue = _resolvedColorValue(provider);
-    final course = Course(
-      id: widget.course?.id,
-      scheduleId: scheduleId,
-      courseId:
-          widget.course?.courseId ??
-          DateTime.now().millisecondsSinceEpoch.toString(),
-      courseName: _nameController.text.trim(),
-      teacher: _teacherController.text.trim(),
-      classRoom: _roomController.text.trim(),
-      dayOfWeek: _dayOfWeek,
-      startNode: _startNode,
-      step: _step,
-      startWeek: _startWeek,
-      endWeek: _endWeek,
-      isVirtual: _isVirtual,
-      color: colorValue,
-    );
+    final original = widget.course;
+    final course = original == null
+        ? Course(
+            scheduleId: scheduleId,
+            courseId: DateTime.now().millisecondsSinceEpoch.toString(),
+            courseName: _nameController.text.trim(),
+            teacher: _teacherController.text.trim(),
+            classRoom: _roomController.text.trim(),
+            dayOfWeek: _dayOfWeek,
+            startNode: _startNode,
+            step: _step,
+            startWeek: _startWeek,
+            endWeek: _endWeek,
+            isVirtual: _isVirtual,
+            color: colorValue,
+          )
+        : original
+              .withUserEdits(
+                original.copyWith(
+                  scheduleId: scheduleId,
+                  courseName: _nameController.text.trim(),
+                  teacher: _teacherController.text.trim(),
+                  classRoom: _roomController.text.trim(),
+                  dayOfWeek: _dayOfWeek,
+                  startNode: _startNode,
+                  step: _step,
+                  startWeek: _startWeek,
+                  endWeek: _endWeek,
+                  weekCode:
+                      (_startWeek != original.startWeek ||
+                          _endWeek != original.endWeek)
+                      ? null
+                      : original.weekCode,
+                  isVirtual: _isVirtual,
+                  // Derived auto-palette colors are not an explicit user edit.
+                  color: _colorManuallySelected ? colorValue : original.color,
+                ),
+              )
+              .copyWith(color: colorValue);
 
-    if (widget.course == null) {
-      await DatabaseHelper.instance.insertCourse(course);
+    final db = widget.databaseHelper ?? DatabaseHelper.instance;
+    if (original == null) {
+      await db.insertCourse(course);
     } else {
-      await DatabaseHelper.instance.updateCourse(course);
+      await db.updateCourse(course);
     }
 
     if (mounted) {

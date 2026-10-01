@@ -58,3 +58,13 @@ int courseWeekForDate(DateTime semesterStart, DateTime date) {
   ).difference(DateTime.utc(monday.year, monday.month, monday.day)).inDays;
   return (diff / 7).floor() + 1;
 }
+
+/// Returns the academic week only for dates inside the configured term.
+int? courseWeekForDateInTerm(
+  DateTime semesterStart,
+  DateTime date,
+  int totalWeeks,
+) {
+  final week = courseWeekForDate(semesterStart, date);
+  return week >= 1 && week <= totalWeeks ? week : null;
+}

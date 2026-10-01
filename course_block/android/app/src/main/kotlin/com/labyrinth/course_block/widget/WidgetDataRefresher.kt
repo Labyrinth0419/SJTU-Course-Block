@@ -114,7 +114,7 @@ object WidgetDataRefresher {
                 now.get(Calendar.MINUTE) * 60_000 +
                 now.get(Calendar.SECOND) * 1_000 +
                 now.get(Calendar.MILLISECOND)
-        val currentWeek = weekForDate(todayEpochDay, schedule)
+        val currentWeek = academicWeekForEpochDay(schedule.startEpochDay, todayEpochDay, schedule.totalWeeks)
 
         val todayCourses = courses
             .filter { isCourseInWeek(it, currentWeek) }
@@ -142,7 +142,7 @@ object WidgetDataRefresher {
         for (offset in 0..2) {
             val epochDay = todayEpochDay + offset
             val parts = dateParts(epochDay)
-            val week = weekForDate(epochDay, schedule)
+            val week = academicWeekForEpochDay(schedule.startEpochDay, epochDay, schedule.totalWeeks)
             val dayCourses = courses
                 .filter { isCourseInWeek(it, week) }
                 .filter { it.dayOfWeek == parts.weekday }
@@ -166,7 +166,7 @@ object WidgetDataRefresher {
         for (dayIndex in 0..6) {
             val epochDay = mondayEpochDay + dayIndex
             val parts = dateParts(epochDay)
-            val week = weekForDate(epochDay, schedule)
+            val week = academicWeekForEpochDay(schedule.startEpochDay, epochDay, schedule.totalWeeks)
             val dayCourses = courses
                 .filter { isCourseInWeek(it, week) }
                 .filter { it.dayOfWeek == parts.weekday }
@@ -224,7 +224,8 @@ object WidgetDataRefresher {
         .put("timeRange", course.timeRange)
         .put("color", course.color)
 
-    private fun isCourseInWeek(course: CourseSnapshot, week: Int): Boolean {
+    private fun isCourseInWeek(course: CourseSnapshot, week: Int?): Boolean {
+        if (week == null) return false
         if (course.weekCode.isNotEmpty()) {
             return week in 1..course.weekCode.length && course.weekCode[week - 1] == '1'
         }
@@ -232,24 +233,6 @@ object WidgetDataRefresher {
         if (course.isOddWeek && week % 2 == 0) return false
         if (course.isEvenWeek && week % 2 != 0) return false
         return true
-    }
-
-    private fun weekForDate(epochDay: Long, schedule: ScheduleSnapshot): Int {
-        val week = Math.floorDiv(epochDay - schedule.startEpochDay, 7L) + 1L
-        return week.coerceIn(1L, schedule.totalWeeks.toLong()).toInt()
-    }
-
-    /** Converts the device-local calendar date to a timezone-independent epoch day. */
-    private fun localEpochDay(calendar: Calendar): Long {
-        val utcCalendar = GregorianCalendar(utc).apply {
-            clear()
-            set(
-                calendar.get(Calendar.YEAR),
-                calendar.get(Calendar.MONTH),
-                calendar.get(Calendar.DAY_OF_MONTH),
-            )
-        }
-        return Math.floorDiv(utcCalendar.timeInMillis, MILLIS_PER_DAY)
     }
 
     private fun dateParts(epochDay: Long): DateParts {

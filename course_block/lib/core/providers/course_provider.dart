@@ -14,7 +14,7 @@ import '../services/course_sync_manager.dart';
 import '../services/course_transfer_manager.dart';
 import '../services/performance_test_data_service.dart';
 import '../services/widget_sync_service.dart';
-import '../utils/time_slots.dart';
+import '../utils/course_occurrences.dart';
 
 class CourseProvider extends ChangeNotifier {
   static const String defaultScheduleName = '默认课表';
@@ -82,6 +82,7 @@ class CourseProvider extends ChangeNotifier {
 
   final CourseScheduleManager _courseScheduleManager;
   final CourseSettingsStore _courseSettingsStore;
+  final DateTime Function() _now;
   final CourseSyncManager _courseSyncManager;
   final CourseTransferManager _courseTransferManager = CourseTransferManager();
   final PerformanceTestDataService _performanceTestDataService =
@@ -101,10 +102,12 @@ class CourseProvider extends ChangeNotifier {
     CourseScheduleManager? courseScheduleManager,
     CourseSettingsStore? courseSettingsStore,
     CourseSyncManager? courseSyncManager,
+    DateTime Function()? now,
   }) : _courseScheduleManager =
            courseScheduleManager ?? CourseScheduleManager(),
        _courseSettingsStore = courseSettingsStore ?? CourseSettingsStore(),
-       _courseSyncManager = courseSyncManager ?? CourseSyncManager() {
+       _courseSyncManager = courseSyncManager ?? CourseSyncManager(),
+       _now = now ?? DateTime.now {
     _appSettingsTail = _loadAppSettings().catchError((Object error) {
       debugPrint('Error loading app settings: $error');
     });
@@ -126,10 +129,7 @@ class CourseProvider extends ChangeNotifier {
       return;
     }
 
-    final diff = normalizeDate(
-      DateTime.now(),
-    ).difference(normalizeDate(schedule.startDate)).inDays;
-    _currentWeek = (diff / 7).floor() + 1;
+    _currentWeek = courseWeekForDate(schedule.startDate, _now());
     _clampCurrentWeek();
   }
 
