@@ -26,7 +26,7 @@ class CourseScheduleManager {
 
   Future<CourseScheduleState> loadScheduleState({
     required String defaultScheduleName,
-  }) async {
+  }) => _databaseHelper.withCourseWriteLock(() async {
     var schedules = await _databaseHelper.getAllSchedules();
     var currentSchedule = await _databaseHelper.getCurrentSchedule();
 
@@ -70,7 +70,7 @@ class CourseScheduleManager {
       currentSchedule: currentSchedule,
       courses: courses,
     );
-  }
+  });
 
   Future<void> switchSchedule(int scheduleId) async {
     await _databaseHelper.setCurrentSchedule(scheduleId);
@@ -107,13 +107,23 @@ class CourseScheduleManager {
   Future<List<Course>> normalizeCourseColors({
     required List<Course> courses,
     required AppCourseColorPalette courseColorPalette,
-  }) async {
-    if (courses.isEmpty) {
-      return courses;
+  }) => _databaseHelper.withCourseWriteLock(() async {
+    if (courses.isEmpty) return courses;
+    final scheduleIds = courses
+        .map((c) => c.scheduleId)
+        .whereType<int>()
+        .toSet();
+    if (scheduleIds.isEmpty) return courses;
+    // The caller's courses may have been loaded before a sync or editor save.
+    final persisted = <Course>[
+      for (final id in scheduleIds)
+        ...await _databaseHelper.getCoursesBySchedule(id),
+    ];
+    if (persisted.every((course) => !isAutoCourseColorValue(course.color))) {
+      return persisted;
     }
-
     final assignments = assignScheduledCourseColorTokens(
-      courses.map(
+      persisted.map(
         (course) => CourseColorIdentityEntry(
           identity: buildCourseColorSeed(course.courseName, course.teacher),
           colorValue: course.color,
@@ -122,30 +132,22 @@ class CourseScheduleManager {
       swatches: courseColorPalette.colors(Brightness.light),
     );
 
-    if (assignments.isEmpty) {
-      return courses;
-    }
+    if (assignments.isEmpty) return persisted;
 
     final updatedCourses = <Course>[];
-    var hasChanges = false;
-
-    for (final course in courses) {
+    for (final course in persisted) {
       final identity = buildCourseColorSeed(course.courseName, course.teacher);
       final assignedColor = assignments[identity] ?? course.color;
       final updatedCourse = assignedColor == course.color
           ? course
           : course.copyWith(color: assignedColor);
 
-      if (updatedCourse.color != course.color) {
-        hasChanges = true;
-        if (updatedCourse.id != null) {
-          await _databaseHelper.updateCourse(updatedCourse);
-        }
+      if (updatedCourse.color != course.color && course.id != null) {
+        await _databaseHelper.updateCourseColor(course.id!, assignedColor);
       }
-
       updatedCourses.add(updatedCourse);
     }
 
-    return hasChanges ? updatedCourses : courses;
-  }
+    return updatedCourses;
+  });
 }

@@ -70,6 +70,18 @@ class _Rows extends DatabaseHelper {
   Future<int> deleteCourse(int id) async => rows.remove(id) == null ? 0 : 1;
 
   @override
+  Future<Course?> getCourseById(int id) async =>
+      rows[id] == null ? null : Course.fromMap(rows[id]!);
+
+  @override
+  Future<int> updateCourseColor(int id, String color) async {
+    final row = rows[id];
+    if (row == null) return 0;
+    rows[id] = {...row, 'color': color};
+    return 1;
+  }
+
+  @override
   Future<List<Course>> getCoursesBySchedule(int scheduleId) async => rows.values
       .where((row) => row['scheduleId'] == scheduleId)
       .map(Course.fromMap)

@@ -40,7 +40,10 @@ class CourseSyncManager {
     required List<Course> courses,
     required AppCourseColorPalette courseColorPalette,
     required String defaultScheduleName,
-  }) async {
+  }) => _databaseHelper.withCourseWriteLock(() async {
+    // Full requests are ordered at invocation, not at fetch completion: an
+    // older response must never apply after a newer one. Network wait holds
+    // this lane, so local writes may wait for a slow sync.
     final syncSystems = await _resolveSyncSystemOrder();
     CourseFetchResult? fetchResult;
     CourseFetchResult? lastEmptyResult;
@@ -120,8 +123,13 @@ class CourseSyncManager {
       );
     }
 
-    var nextCurrentSchedule = currentSchedule;
+    // A concurrent first sync may already have created the default schedule.
+    var nextCurrentSchedule =
+        currentSchedule ?? await _databaseHelper.getCurrentSchedule();
     var nextSchedules = [...schedules];
+    if (nextCurrentSchedule != null) {
+      nextSchedules = _upsertScheduleCache(nextSchedules, nextCurrentSchedule);
+    }
     final termLabel = _buildTermLabel(year, term);
 
     if (nextCurrentSchedule == null) {
@@ -275,7 +283,7 @@ class CourseSyncManager {
       schedules: nextSchedules,
       courses: persistedCourses,
     );
-  }
+  });
 
   Future<List<AcademicLoginSystem>> _resolveSyncSystemOrder() async {
     final availableSystems = await LoginSessionStorage.loadAvailableSystems();

@@ -2,10 +2,16 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/course.dart';
 import '../models/schedule.dart';
+import 'course_write_coordinator.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   Database? _database;
+  final CourseWriteCoordinator _writeCoordinator = CourseWriteCoordinator();
+
+  /// Enqueues an awaited read/merge/write phase on this persistence instance.
+  Future<T> withCourseWriteLock<T>(Future<T> Function() operation) =>
+      _writeCoordinator.run(operation);
 
   DatabaseHelper._init();
 
@@ -84,41 +90,43 @@ class DatabaseHelper {
     }
   }
 
-  Future<int> insertSchedule(Schedule schedule) async {
-    final db = await instance.database;
-    if (schedule.isCurrent) {
-      await db.update('schedules', {'isCurrent': 0});
-    }
-    return await db.insert('schedules', schedule.toMap());
-  }
+  Future<int> insertSchedule(Schedule schedule) =>
+      withCourseWriteLock(() async {
+        final db = await database;
+        if (schedule.isCurrent) {
+          await db.update('schedules', {'isCurrent': 0});
+        }
+        return db.insert('schedules', schedule.toMap());
+      });
 
-  Future<int> updateSchedule(Schedule schedule) async {
-    final db = await instance.database;
-    if (schedule.isCurrent) {
-      await db.update('schedules', {'isCurrent': 0});
-    }
-    return await db.update(
-      'schedules',
-      schedule.toMap(),
-      where: 'id = ?',
-      whereArgs: [schedule.id],
-    );
-  }
+  Future<int> updateSchedule(Schedule schedule) =>
+      withCourseWriteLock(() async {
+        final db = await database;
+        if (schedule.isCurrent) {
+          await db.update('schedules', {'isCurrent': 0});
+        }
+        return db.update(
+          'schedules',
+          schedule.toMap(),
+          where: 'id = ?',
+          whereArgs: [schedule.id],
+        );
+      });
 
-  Future<int> deleteSchedule(int id) async {
-    final db = await instance.database;
+  Future<int> deleteSchedule(int id) => withCourseWriteLock(() async {
+    final db = await database;
     await db.delete('courses', where: 'scheduleId = ?', whereArgs: [id]);
-    return await db.delete('schedules', where: 'id = ?', whereArgs: [id]);
-  }
+    return db.delete('schedules', where: 'id = ?', whereArgs: [id]);
+  });
 
   Future<List<Schedule>> getAllSchedules() async {
-    final db = await instance.database;
+    final db = await database;
     final result = await db.query('schedules', orderBy: 'id DESC');
     return result.map((json) => Schedule.fromMap(json)).toList();
   }
 
   Future<Schedule?> getCurrentSchedule() async {
-    final db = await instance.database;
+    final db = await database;
     final result = await db.query(
       'schedules',
       where: 'isCurrent = ?',
@@ -131,8 +139,8 @@ class DatabaseHelper {
     return null;
   }
 
-  Future<void> setCurrentSchedule(int id) async {
-    final db = await instance.database;
+  Future<void> setCurrentSchedule(int id) => withCourseWriteLock(() async {
+    final db = await database;
     await db.transaction((txn) async {
       await txn.update('schedules', {'isCurrent': 0});
       await txn.update(
@@ -142,48 +150,104 @@ class DatabaseHelper {
         whereArgs: [id],
       );
     });
-  }
+  });
 
-  Future<int> insertCourse(Course course) async {
-    final db = await instance.database;
-    return await db.insert(
+  Future<int> insertCourse(Course course) => withCourseWriteLock(() async {
+    final db = await database;
+    return db.insert(
       'courses',
       course.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-  }
+  });
 
-  Future<int> updateCourse(Course course) async {
-    final db = await instance.database;
-    return await db.update(
+  Future<int> updateCourse(Course course) => withCourseWriteLock(() async {
+    final db = await database;
+    return db.update(
       'courses',
       course.toMap(),
       where: 'id = ?',
       whereArgs: [course.id],
     );
-  }
+  });
 
-  Future<int> deleteCourse(int id) async {
-    final db = await instance.database;
-    return await db.delete('courses', where: 'id = ?', whereArgs: [id]);
-  }
+  Future<int> deleteCourse(int id) => withCourseWriteLock(() async {
+    final db = await database;
+    return db.delete('courses', where: 'id = ?', whereArgs: [id]);
+  });
 
-  Future<int> clearAllCourses() async {
-    final db = await instance.database;
-    return await db.delete('courses');
-  }
+  Future<int> clearAllCourses() => withCourseWriteLock(() async {
+    final db = await database;
+    return db.delete('courses');
+  });
 
-  Future<int> deleteCoursesBySchedule(int scheduleId) async {
-    final db = await instance.database;
-    return await db.delete(
+  Future<int> deleteCoursesBySchedule(int scheduleId) =>
+      withCourseWriteLock(() async {
+        final db = await database;
+        return db.delete(
+          'courses',
+          where: 'scheduleId = ?',
+          whereArgs: [scheduleId],
+        );
+      });
+
+  Future<Course?> getCourseById(int id) async {
+    final db = await database;
+    final rows = await db.query(
       'courses',
-      where: 'scheduleId = ?',
-      whereArgs: [scheduleId],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
     );
+    return rows.isEmpty ? null : Course.fromMap(rows.single);
   }
+
+  /// Applies only editor changes relative to its opening snapshot to a fresh row.
+  Future<int> updateCourseFromEditor({
+    required Course original,
+    required Course submitted,
+    String? derivedColor,
+  }) => withCourseWriteLock(() async {
+    if (original.id == null) return 0;
+    final current = await getCourseById(original.id!);
+    if (current == null) return 0;
+
+    final before = original.syncFields;
+    final after = submitted.syncFields;
+    final changes = <String, dynamic>{};
+    for (final field in Course.syncFieldNames) {
+      if (before[field] != after[field]) changes[field] = after[field];
+    }
+    if (before['startWeek'] != after['startWeek'] ||
+        before['endWeek'] != after['endWeek']) {
+      changes['weekCode'] = null;
+    }
+    final edited = current.withUserEdits(
+      Course.fromMap({...current.toMap(), ...changes}),
+    );
+    final next =
+        derivedColor != null &&
+            current.color == original.color &&
+            !changes.containsKey('color')
+        ? edited.copyWith(color: derivedColor)
+        : edited;
+    return updateCourse(next);
+  });
+
+  /// Changes only color; stale display rows never replace synced metadata.
+  Future<int> updateCourseColor(int id, String color) =>
+      withCourseWriteLock(() async {
+        final db = await database;
+        return db.update(
+          'courses',
+          {'color': color},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      });
 
   Future<List<Course>> getCoursesBySchedule(int scheduleId) async {
-    final db = await instance.database;
+    final db = await database;
     final result = await db.query(
       'courses',
       where: 'scheduleId = ?',
@@ -193,13 +257,13 @@ class DatabaseHelper {
   }
 
   Future<List<Course>> getAllCourses() async {
-    final db = await instance.database;
+    final db = await database;
     final result = await db.query('courses');
     return result.map((json) => Course.fromMap(json)).toList();
   }
 
   Future<void> close() async {
-    final db = await instance.database;
+    final db = await database;
     db.close();
   }
 }
