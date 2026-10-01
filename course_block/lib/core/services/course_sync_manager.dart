@@ -5,6 +5,7 @@ import '../models/schedule.dart';
 import '../theme/app_theme.dart';
 import '../utils/time_slots.dart';
 import 'course_service.dart';
+import 'course_sync_merge.dart';
 import 'login_session.dart';
 
 class CourseSyncExecutionResult {
@@ -193,19 +194,55 @@ class CourseSyncManager {
     final targetCourses = uniqueCourses.values
         .map((course) => _bindFetchedCourseToSchedule(course, scheduleId))
         .toList();
-    final diff = _diffCourses(existingCourses, targetCourses);
-
-    await _databaseHelper.deleteCoursesBySchedule(scheduleId);
-
-    final insertFailures = <CourseOperationFailure>[];
-    for (final course in targetCourses) {
+    final hasMissingCourseIds = targetCourses.any(
+      (course) => course.courseId.trim().isEmpty,
+    );
+    final plan = planCourseSync(
+      existing: existingCourses,
+      incoming: targetCourses,
+      sourceSystem: fetchResult.sourceSystem.storageKey,
+      allowRemoval: fetchResult.failures.isEmpty && !hasMissingCourseIds,
+    );
+    final writeFailures = <CourseOperationFailure>[];
+    var added = 0;
+    var updated = 0;
+    var removed = 0;
+    for (final course in plan.updates) {
+      try {
+        await _databaseHelper.updateCourse(course);
+        if (course.sourceSystem == fetchResult.sourceSystem.storageKey) {
+          updated++;
+        }
+      } catch (e) {
+        writeFailures.add(
+          CourseOperationFailure(
+            label: course.courseName,
+            reason: '更新失败：${_formatOperationError(e, fallback: '无法保存这条课程')}',
+          ),
+        );
+      }
+    }
+    for (final course in plan.inserts) {
       try {
         await _databaseHelper.insertCourse(course);
+        added++;
       } catch (e) {
-        insertFailures.add(
+        writeFailures.add(
           CourseOperationFailure(
             label: course.courseName,
             reason: '写入失败：${_formatOperationError(e, fallback: '无法保存这条课程')}',
+          ),
+        );
+      }
+    }
+    for (final id in plan.deletes) {
+      try {
+        removed += await _databaseHelper.deleteCourse(id);
+      } catch (e) {
+        writeFailures.add(
+          CourseOperationFailure(
+            label: '课程 $id',
+            reason: '删除失败：${_formatOperationError(e, fallback: '无法保存这条课程')}',
           ),
         );
       }
@@ -216,20 +253,23 @@ class CourseSyncManager {
     );
     final notes = <String>[
       ...fetchResult.notes,
+      ...plan.notes,
       if (duplicateCount > 0) '已合并 $duplicateCount 条重复课程记录。',
-      if (diff.removed > 0) '同步后有 ${diff.removed} 条旧课程未保留。',
+      if (removed > 0) '同步后移除了 $removed 条教务系统已删除的课程。',
+      if (fetchResult.failures.isNotEmpty) '部分排课解析失败，本次未删除旧教务课程。',
+      if (hasMissingCourseIds) '部分课程缺少教务编号，本次未删除旧教务课程。',
     ];
 
     return CourseSyncExecutionResult(
       report: CourseSyncReport(
         termLabel: termLabel,
         sourceLabel: fetchResult.sourceLabel,
-        added: diff.added,
-        updated: diff.updated,
-        skipped: diff.skipped,
-        failed: fetchResult.failures.length + insertFailures.length,
+        added: added,
+        updated: updated,
+        skipped: plan.skipped,
+        failed: fetchResult.failures.length + writeFailures.length,
         notes: notes,
-        failures: [...fetchResult.failures, ...insertFailures],
+        failures: [...fetchResult.failures, ...writeFailures],
       ),
       currentSchedule: nextCurrentSchedule,
       schedules: nextSchedules,
@@ -294,7 +334,16 @@ class CourseSyncManager {
   }
 
   Course _bindFetchedCourseToSchedule(Course course, int scheduleId) {
-    return course.copyWith(scheduleId: scheduleId, isVirtual: course.isVirtual);
+    // Upstream data must never reuse a local database ID or imported provenance.
+    return Course.fromMap({
+      ...course.toMap(),
+      'id': null,
+      'scheduleId': scheduleId,
+      'sourceSystem': 'local',
+      'remoteCourseKey': null,
+      'remoteBaseline': null,
+      'editedFields': '[]',
+    });
   }
 
   String _courseExactKey(Course course) {
@@ -315,78 +364,6 @@ class CourseSyncManager {
     ].join('|');
   }
 
-  String _courseStableKey(Course course) {
-    return [
-      course.courseId.trim(),
-      course.courseName.trim(),
-      course.teacher.trim(),
-      course.dayOfWeek,
-      course.startNode,
-      course.step,
-    ].join('|');
-  }
-
-  bool _consumeCount(Map<String, int> counts, String key) {
-    final current = counts[key] ?? 0;
-    if (current <= 0) {
-      return false;
-    }
-    if (current == 1) {
-      counts.remove(key);
-    } else {
-      counts[key] = current - 1;
-    }
-    return true;
-  }
-
-  _CourseDiffSummary _diffCourses(
-    List<Course> existingCourses,
-    List<Course> incomingCourses,
-  ) {
-    final exactCounts = <String, int>{};
-    final stableCounts = <String, int>{};
-
-    for (final course in existingCourses) {
-      final exactKey = _courseExactKey(course);
-      final stableKey = _courseStableKey(course);
-      exactCounts[exactKey] = (exactCounts[exactKey] ?? 0) + 1;
-      stableCounts[stableKey] = (stableCounts[stableKey] ?? 0) + 1;
-    }
-
-    var added = 0;
-    var updated = 0;
-    var skipped = 0;
-
-    for (final course in incomingCourses) {
-      final exactKey = _courseExactKey(course);
-      final stableKey = _courseStableKey(course);
-
-      if (_consumeCount(exactCounts, exactKey)) {
-        _consumeCount(stableCounts, stableKey);
-        skipped++;
-        continue;
-      }
-
-      if (_consumeCount(stableCounts, stableKey)) {
-        updated++;
-        continue;
-      }
-
-      added++;
-    }
-
-    final removed = (existingCourses.length - skipped - updated).clamp(
-      0,
-      existingCourses.length,
-    );
-    return _CourseDiffSummary(
-      added: added,
-      updated: updated,
-      skipped: skipped,
-      removed: removed,
-    );
-  }
-
   String _formatOperationError(Object error, {required String fallback}) {
     final raw = error
         .toString()
@@ -394,18 +371,4 @@ class CourseSyncManager {
         .trim();
     return raw.isEmpty ? fallback : raw;
   }
-}
-
-class _CourseDiffSummary {
-  const _CourseDiffSummary({
-    required this.added,
-    required this.updated,
-    required this.skipped,
-    required this.removed,
-  });
-
-  final int added;
-  final int updated;
-  final int skipped;
-  final int removed;
 }
