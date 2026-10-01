@@ -33,6 +33,7 @@ class WidgetSyncService {
     required AppThemeScheme themeScheme,
     required ThemeMode themeMode,
     required AppCourseColorPalette courseColorPalette,
+    DateTime? now,
   }) async {
     await HomeWidget.saveWidgetData('theme_scheme', themeScheme.storageKey);
     await HomeWidget.saveWidgetData(
@@ -59,21 +60,21 @@ class WidgetSyncService {
       return;
     }
 
-    final today = normalizeDate(DateTime.now());
-    final start = normalizeDate(schedule.startDate);
-    final diffDays = today.difference(start).inDays;
-    var currentWeek = (diffDays / 7).floor() + 1;
-    if (currentWeek < 1) currentWeek = 1;
-    if (currentWeek > totalWeeks) currentWeek = totalWeeks;
+    final currentTime = now ?? DateTime.now();
+    final today = normalizeDate(currentTime);
+    final currentWeek = courseWeekForDateInTerm(
+      schedule.startDate,
+      today,
+      totalWeeks,
+    );
 
     final weekdayShort = _weekdaysShort[today.weekday]; // weekday is 1–7
 
-    final now = DateTime.now();
     final todayCourses =
         courses
             .where((c) => _isCourseInWeek(c, currentWeek))
             .where((c) => c.dayOfWeek == today.weekday)
-            .where((c) => _courseEndTime(today, c).isAfter(now))
+            .where((c) => _courseEndTime(today, c).isAfter(currentTime))
             .toList()
           ..sort((a, b) => a.startNode.compareTo(b.startNode));
 
@@ -105,9 +106,9 @@ class WidgetSyncService {
       final end = _courseEndTime(today, c);
       final start2 = _courseStartDateTime(today, c);
       final String status;
-      if (end.isBefore(now)) {
+      if (end.isBefore(currentTime)) {
         status = 'done';
-      } else if (start2.isBefore(now)) {
+      } else if (start2.isBefore(currentTime)) {
         status = 'current';
       } else {
         status = 'upcoming';
@@ -124,17 +125,21 @@ class WidgetSyncService {
     // ── upcoming_list：近 3 天课程（含今日剩余），带日期标题 ──────────────────
     final upcomingItems = <Map<String, String>>[];
     for (int offset = 0; offset < 3; offset++) {
-      final date = today.add(Duration(days: offset));
-      final diffOff = date.difference(start).inDays;
-      final weekOff = ((diffOff / 7).floor() + 1).clamp(1, totalWeeks);
+      final date = DateTime(today.year, today.month, today.day + offset);
+      final weekOff = courseWeekForDateInTerm(
+        schedule.startDate,
+        date,
+        totalWeeks,
+      );
 
       final dayCourses =
           courses
               .where((c) => _isCourseInWeek(c, weekOff))
               .where((c) => c.dayOfWeek == date.weekday)
               .where(
-                (c) =>
-                    offset == 0 ? _courseEndTime(date, c).isAfter(now) : true,
+                (c) => offset == 0
+                    ? _courseEndTime(date, c).isAfter(currentTime)
+                    : true,
               )
               .toList()
             ..sort((a, b) => a.startNode.compareTo(b.startNode));
@@ -165,9 +170,16 @@ class WidgetSyncService {
     final weekItems = <Map<String, String>>[];
     final mondayOffset = -(today.weekday - 1);
     for (int i = 0; i < 7; i++) {
-      final date = today.add(Duration(days: mondayOffset + i));
-      final diffW = date.difference(start).inDays;
-      final weekW = ((diffW / 7).floor() + 1).clamp(1, totalWeeks);
+      final date = DateTime(
+        today.year,
+        today.month,
+        today.day + mondayOffset + i,
+      );
+      final weekW = courseWeekForDateInTerm(
+        schedule.startDate,
+        date,
+        totalWeeks,
+      );
       final wd = i + 1; // 1=Mon … 7=Sun
 
       final dayCourses =
@@ -334,6 +346,6 @@ class WidgetSyncService {
     return '$h:$m';
   }
 
-  bool _isCourseInWeek(Course course, int currentWeek) =>
-      courseOccursInWeek(course, currentWeek);
+  bool _isCourseInWeek(Course course, int? currentWeek) =>
+      currentWeek != null && courseOccursInWeek(course, currentWeek);
 }
