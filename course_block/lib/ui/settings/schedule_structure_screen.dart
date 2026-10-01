@@ -3,6 +3,7 @@ import 'package:numberpicker/numberpicker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/providers/course_provider.dart';
+import '../../core/services/course_settings_store.dart';
 
 class ScheduleStructureScreen extends StatelessWidget {
   const ScheduleStructureScreen({super.key});
@@ -68,6 +69,7 @@ class ScheduleStructureScreen extends StatelessWidget {
                     onTap: () => _showDoubleInputDialog(
                       context,
                       title: '课程格子高度',
+                      key: CourseSettingsStore.gridHeightKey,
                       currentValue: provider.gridHeight,
                       onChanged: (value) => provider
                           .updateCurrentScheduleSetting('grid_height', value),
@@ -81,6 +83,7 @@ class ScheduleStructureScreen extends StatelessWidget {
                     onTap: () => _showDoubleInputDialog(
                       context,
                       title: '格子圆角半径',
+                      key: CourseSettingsStore.cornerRadiusKey,
                       currentValue: provider.cornerRadius,
                       onChanged: (value) => provider
                           .updateCurrentScheduleSetting('corner_radius', value),
@@ -164,39 +167,50 @@ class ScheduleStructureScreen extends StatelessWidget {
   void _showDoubleInputDialog(
     BuildContext context, {
     required String title,
+    required String key,
     required double currentValue,
-    required ValueChanged<double> onChanged,
+    required Future<void> Function(double) onChanged,
     String suffix = 'dp',
   }) {
-    final controller = TextEditingController(text: currentValue.toString());
+    var input = currentValue.toString();
+    String? errorText;
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            suffixText: suffix,
-            border: const OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = double.tryParse(controller.text);
-              if (value != null) {
-                onChanged(value);
-              }
-              Navigator.pop(dialogContext);
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: TextFormField(
+            initialValue: input,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (text) {
+              input = text;
+              if (errorText != null) setDialogState(() => errorText = null);
             },
-            child: const Text('确定'),
+            decoration: InputDecoration(
+              suffixText: suffix,
+              border: const OutlineInputBorder(),
+              errorText: errorText,
+            ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final value = double.tryParse(input);
+                if (!CourseSettingsStore.isValidFloatSetting(key, value)) {
+                  setDialogState(() => errorText = '请输入有效的数值');
+                  return;
+                }
+                await onChanged(value!);
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
       ),
     );
   }
