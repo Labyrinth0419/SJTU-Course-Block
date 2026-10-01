@@ -3,10 +3,12 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../models/course.dart';
+import '../utils/course_occurrences.dart';
 import '../utils/time_slots.dart';
 
 class CalendarService {
-  CalendarService() {
+  CalendarService({DeviceCalendarPlugin? deviceCalendarPlugin})
+    : _deviceCalendarPlugin = deviceCalendarPlugin ?? DeviceCalendarPlugin() {
     if (!_tzInitialized) {
       tzdata.initializeTimeZones();
       _tzInitialized = true;
@@ -15,7 +17,7 @@ class CalendarService {
 
   static bool _tzInitialized = false;
 
-  final DeviceCalendarPlugin _deviceCalendarPlugin = DeviceCalendarPlugin();
+  final DeviceCalendarPlugin _deviceCalendarPlugin;
 
   Future<bool> _ensurePermission() async {
     final hasPermissionResult = await _deviceCalendarPlugin.hasPermissions();
@@ -47,53 +49,37 @@ class CalendarService {
     final calendar = await _pickWritableCalendar();
     if (calendar == null) return 0;
 
-    // Align startDate to the Monday of its week, so that dayOfWeek offsets
-    // are always calculated from a Monday baseline.
-    final normalized = normalizeDate(startDate);
-    final normalizedStart = normalized.subtract(
-      Duration(days: normalized.weekday - 1),
-    );
-
     int created = 0;
     for (final course in courses) {
       if (course.isVirtual) continue;
-      final baseDate = normalizedStart.add(
-        Duration(days: (course.startWeek - 1) * 7 + (course.dayOfWeek - 1)),
-      );
-      final start = classStartDateTime(baseDate, course.startNode);
-      final end = classEndDateTime(baseDate, course.startNode, course.step);
+      final weeks = courseOccurrenceWeeks(course);
+      if (weeks.isEmpty) continue;
 
-      int interval = 1;
-      int count = course.endWeek - course.startWeek + 1;
-      if (course.isOddWeek ^ course.isEvenWeek) {
-        interval = 2;
-        count = ((course.endWeek - course.startWeek) / 2).floor() + 1;
-      }
-
-      // Build the recurrence rule only when there are multiple occurrences.
-      RecurrenceRule? recurrenceRule;
-      if (count > 1) {
-        recurrenceRule = RecurrenceRule(
-          RecurrenceFrequency.Weekly,
-          interval: interval,
-          totalOccurrences: count,
+      final interval = courseWeekInterval(weeks);
+      // The plugin supports regular recurrence rules, but not RDATE gaps.
+      final eventWeeks = interval == null ? weeks : [weeks.first];
+      var allSucceeded = true;
+      for (final week in eventWeeks) {
+        final baseDate = courseDateForWeek(startDate, week, course.dayOfWeek);
+        final event = Event(
+          calendar.id,
+          title: course.courseName,
+          description: course.teacher,
+          location: course.classRoom,
+          start: _toTz(classStartDateTime(baseDate, course.startNode)),
+          end: _toTz(classEndDateTime(baseDate, course.startNode, course.step)),
+          recurrenceRule: interval == null
+              ? null
+              : RecurrenceRule(
+                  RecurrenceFrequency.Weekly,
+                  interval: interval,
+                  totalOccurrences: weeks.length,
+                ),
         );
+        final result = await _deviceCalendarPlugin.createOrUpdateEvent(event);
+        if (result?.isSuccess != true) allSucceeded = false;
       }
-
-      final event = Event(
-        calendar.id,
-        title: course.courseName,
-        description: course.teacher,
-        location: course.classRoom,
-        start: _toTz(start),
-        end: _toTz(end),
-        recurrenceRule: recurrenceRule,
-      );
-
-      final result = await _deviceCalendarPlugin.createOrUpdateEvent(event);
-      if (result?.isSuccess == true) {
-        created++;
-      }
+      if (allSucceeded) created++;
     }
 
     return created;
