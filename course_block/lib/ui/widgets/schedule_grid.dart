@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/db/database_helper.dart';
 import '../../core/models/course.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/course_occurrences.dart';
 import '../../core/utils/time_slots.dart';
 import '../course/add_course_screen.dart';
 
@@ -612,20 +613,8 @@ class ScheduleGrid extends StatelessWidget {
     );
   }
 
-  bool _isCourseInWeek(Course course, int currentWeek) {
-    if (course.weekCode != null && course.weekCode!.isNotEmpty) {
-      if (currentWeek > 0 && currentWeek <= course.weekCode!.length) {
-        return course.weekCode![currentWeek - 1] == '1';
-      }
-      return false;
-    }
-    if (currentWeek < course.startWeek || currentWeek > course.endWeek) {
-      return false;
-    }
-    if (course.isOddWeek && currentWeek % 2 == 0) return false;
-    if (course.isEvenWeek && currentWeek % 2 != 0) return false;
-    return true;
-  }
+  bool _isCourseInWeek(Course course, int currentWeek) =>
+      courseOccursInWeek(course, currentWeek);
 
   Color _getCourseColor(
     Course course,

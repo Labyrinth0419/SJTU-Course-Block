@@ -10,6 +10,7 @@ import '../db/database_helper.dart';
 import '../models/course.dart';
 import '../models/course_operation_report.dart';
 import '../theme/app_theme.dart';
+import '../utils/course_occurrences.dart';
 import '../utils/time_slots.dart';
 import 'calendar_service.dart';
 
@@ -247,28 +248,33 @@ class CourseTransferManager {
     DateTime startDate,
     AppCourseColorPalette courseColorPalette,
   ) {
-    final events = content.split('BEGIN:VEVENT').skip(1);
-    final list = <Course>[];
+    final events = content
+        .replaceAll(RegExp(r'\r?\n[ \t]'), '')
+        .split('BEGIN:VEVENT')
+        .skip(1);
+    final courses = <Course>[];
     final failures = <CourseOperationFailure>[];
-    final normalizedStart = normalizeDate(startDate);
     var index = 0;
     for (final ev in events) {
       index++;
-
-      String? readField(String name) {
-        final reg = RegExp('$name[^:]*:(.+)');
-        final m = reg.firstMatch(ev);
-        return m?.group(1)?.trim();
+      final eventEnd = ev.indexOf('END:VEVENT');
+      if (eventEnd < 0) {
+        failures.add(
+          CourseOperationFailure(label: '第 $index 条日历事件', reason: '缺少事件结束标记'),
+        );
+        continue;
       }
+      final lines = ev.substring(0, eventEnd).split(RegExp(r'\r?\n'));
+      List<String> fields(String name) => [
+        for (final line in lines)
+          if (line.startsWith('$name:') || line.startsWith('$name;'))
+            line.substring(line.indexOf(':') + 1).trim(),
+      ];
+      String? field(String name) => fields(name).firstOrNull;
 
-      final summary = readField('SUMMARY');
-      final location = readField('LOCATION');
-      final dtstart = readField('DTSTART');
-      final dtend = readField('DTEND');
-      final duration = readField('DURATION');
-      final rrule = readField('RRULE');
+      final summary = field('SUMMARY');
       final label = summary?.trim().isNotEmpty == true
-          ? summary!.trim()
+          ? _unescapeIcsText(summary!)
           : '第 $index 条日历事件';
       if (summary == null || summary.trim().isEmpty) {
         failures.add(
@@ -276,8 +282,35 @@ class CourseTransferManager {
         );
         continue;
       }
-      if (dtstart == null || dtstart.trim().isEmpty) {
+      final dtstart = field('DTSTART');
+      if (dtstart == null || dtstart.isEmpty) {
         failures.add(CourseOperationFailure(label: label, reason: '缺少开始时间'));
+        continue;
+      }
+      final rrules = fields('RRULE');
+      final rdates = fields('RDATE');
+      if (rrules.length > 1 ||
+          fields('DTSTART').length > 1 ||
+          fields('DTEND').length > 1 ||
+          lines.any((line) => line.startsWith('RRULE;')) ||
+          (rrules.isNotEmpty && rdates.isNotEmpty) ||
+          ((rrules.isNotEmpty || rdates.isNotEmpty) &&
+              (dtstart.length == 8 || field('DTEND')?.length == 8)) ||
+          fields('EXDATE').isNotEmpty ||
+          fields('EXRULE').isNotEmpty ||
+          fields('RECURRENCE-ID').isNotEmpty ||
+          ['DTSTART', 'DTEND', 'RDATE'].any(
+            (name) => lines.any(
+              (line) =>
+                  (line.startsWith('$name;') &&
+                  line.contains('TZID=') &&
+                  !line.contains('TZID=Asia/Shanghai:') &&
+                  !line.contains('TZID=Asia/Shanghai;')),
+            ),
+          )) {
+        failures.add(
+          CourseOperationFailure(label: label, reason: '不支持此日历重复规则或时区'),
+        );
         continue;
       }
 
@@ -288,69 +321,128 @@ class CourseTransferManager {
         );
         continue;
       }
-
-      DateTime? end;
-      if (dtend != null) {
-        end = _parseIcsDateTime(dtend);
-        if (end == null) {
-          failures.add(
-            CourseOperationFailure(label: label, reason: '结束时间格式无法识别'),
-          );
-          continue;
-        }
+      final dtend = field('DTEND');
+      final end = dtend == null ? null : _parseIcsDateTime(dtend);
+      if (dtend != null && end == null) {
+        failures.add(
+          CourseOperationFailure(label: label, reason: '结束时间格式无法识别'),
+        );
+        continue;
       }
-
-      final diff = start.difference(normalizedStart).inDays;
-      var week = (diff / 7).floor() + 1;
+      final week = courseWeekForDate(startDate, start);
       if (week < 1) {
-        week = 1;
+        failures.add(
+          CourseOperationFailure(label: label, reason: '课程日期早于学期起始周'),
+        );
+        continue;
       }
-      final day = start.weekday;
-
       final startNode = resolveStartNode(start);
       var step = 1;
       if (end != null) {
         final endNode = resolveEndNode(end);
         step = (endNode - startNode + 1).clamp(1, kClassEndTimes.length);
-      } else if (duration != null) {
-        final match = RegExp(r'PT(\d+)M').firstMatch(duration);
+      } else if (field('DURATION') != null) {
+        final match = RegExp(r'^PT(\d+)M$').firstMatch(field('DURATION')!);
         if (match != null) {
           final mins = int.tryParse(match.group(1)!) ?? 0;
           step = (mins / 45).ceil();
         }
       }
 
-      var endWeek = week;
-      if (rrule != null) {
-        final countMatch = RegExp(r'COUNT=(\d+)').firstMatch(rrule);
-        if (countMatch != null) {
-          final cnt = int.tryParse(countMatch.group(1)!) ?? 1;
-          endWeek = week + cnt - 1;
+      final weeks = <int>[week];
+      if (rrules.isNotEmpty) {
+        final parts = rrules.single.split(';');
+        final rule = <String, String>{};
+        for (final part in parts) {
+          final pair = part.split('=');
+          if (pair.length == 2) rule[pair[0]] = pair[1];
+        }
+        final count = int.tryParse(rule['COUNT'] ?? '');
+        final interval = int.tryParse(rule['INTERVAL'] ?? '1');
+        if (parts.length != rule.length ||
+            rule.keys.any(
+              (key) => !{'FREQ', 'COUNT', 'INTERVAL'}.contains(key),
+            ) ||
+            rule['FREQ'] != 'WEEKLY' ||
+            count == null ||
+            count < 1 ||
+            count > 1000 ||
+            interval == null ||
+            interval < 1 ||
+            interval > 1000 ||
+            week + (count - 1) * interval > 1000) {
+          failures.add(
+            CourseOperationFailure(label: label, reason: '不支持此日历重复规则'),
+          );
+          continue;
+        }
+        for (var i = 1; i < count; i++) {
+          weeks.add(week + i * interval);
+        }
+      } else if (rdates.isNotEmpty) {
+        var valid = true;
+        for (final raw in rdates.expand((entry) => entry.split(','))) {
+          final date = _parseIcsDateTime(raw);
+          if (date == null ||
+              date.weekday != start.weekday ||
+              date.hour != start.hour ||
+              date.minute != start.minute ||
+              date.second != start.second ||
+              courseWeekForDate(startDate, date) < 1 ||
+              courseWeekForDate(startDate, date) > 1000) {
+            valid = false;
+            break;
+          }
+          weeks.add(courseWeekForDate(startDate, date));
+        }
+        if (!valid || weeks.toSet().length != weeks.length) {
+          failures.add(
+            CourseOperationFailure(label: label, reason: '不支持此日历附加日期'),
+          );
+          continue;
+        }
+        weeks.sort();
+        if (weeks.first != week) {
+          failures.add(
+            CourseOperationFailure(label: label, reason: '附加日期早于开始日期'),
+          );
+          continue;
         }
       }
 
-      list.add(
+      final interval = courseWeekInterval(weeks);
+      final isOddWeek = interval == 2 && weeks.first.isOdd;
+      final isEvenWeek = interval == 2 && weeks.first.isEven;
+      final selectedWeeks = weeks.toSet();
+      final weekCode = weeks.length > 1 && interval != 1 && interval != 2
+          ? [
+              for (var w = 1; w <= weeks.last; w++)
+                selectedWeeks.contains(w) ? '1' : '0',
+            ].join()
+          : null;
+      final name = _unescapeIcsText(summary);
+      courses.add(
         Course(
           scheduleId: null,
           courseId: '',
-          courseName: summary,
+          courseName: name,
           teacher: '',
-          classRoom: location ?? '',
-          startWeek: week,
-          endWeek: endWeek,
-          dayOfWeek: day,
+          classRoom: _unescapeIcsText(field('LOCATION') ?? ''),
+          startWeek: weeks.first,
+          endWeek: weeks.last,
+          dayOfWeek: start.weekday,
           startNode: startNode,
           step: step,
-          isOddWeek: false,
-          isEvenWeek: false,
-          weekCode: null,
+          isOddWeek: isOddWeek,
+          isEvenWeek: isEvenWeek,
+          weekCode: weekCode,
           color: courseColorPalette.autoColorToken(
-            buildCourseColorSeed(summary, ''),
+            buildCourseColorSeed(name, ''),
           ),
         ),
       );
     }
-    return _IcsParseResult(courses: list, failures: failures);
+    return _IcsParseResult(courses: courses, failures: failures);
   }
 
   String _generateIcs(List<Course> courses, DateTime startDate) {
@@ -360,48 +452,90 @@ class CourseTransferManager {
     buffer.writeln('PRODID:-//CourseBlock//EN');
     buffer.writeln('X-WR-TIMEZONE:Asia/Shanghai');
 
-    final normalizedStart = normalizeDate(startDate);
-
     for (final course in courses) {
-      final baseDate = normalizedStart.add(
-        Duration(days: (course.startWeek - 1) * 7 + (course.dayOfWeek - 1)),
+      final weeks = courseOccurrenceWeeks(course);
+      if (weeks.isEmpty) continue;
+      final baseDate = courseDateForWeek(
+        startDate,
+        weeks.first,
+        course.dayOfWeek,
       );
-
       final start = classStartDateTime(baseDate, course.startNode);
       final end = classEndDateTime(baseDate, course.startNode, course.step);
-
-      var interval = 1;
-      var count = course.endWeek - course.startWeek + 1;
-      if (course.isOddWeek ^ course.isEvenWeek) {
-        interval = 2;
-        count = ((course.endWeek - course.startWeek) / 2).floor() + 1;
-      }
+      final interval = courseWeekInterval(weeks);
 
       buffer.writeln('BEGIN:VEVENT');
-      buffer.writeln('SUMMARY:${course.courseName}');
-      buffer.writeln('LOCATION:${course.classRoom}');
+      buffer.writeln('SUMMARY:${_escapeIcsText(course.courseName)}');
+      buffer.writeln('LOCATION:${_escapeIcsText(course.classRoom)}');
       buffer.writeln('DTSTART;TZID=Asia/Shanghai:${_formatIcsDateTime(start)}');
       buffer.writeln('DTEND;TZID=Asia/Shanghai:${_formatIcsDateTime(end)}');
-      buffer.writeln('RRULE:FREQ=WEEKLY;INTERVAL=$interval;COUNT=$count');
+      if (interval != null) {
+        buffer.writeln(
+          'RRULE:FREQ=WEEKLY;INTERVAL=$interval;COUNT=${weeks.length}',
+        );
+      } else if (weeks.length > 1) {
+        final extraDates = [
+          for (final week in weeks.skip(1))
+            _formatIcsDateTime(
+              classStartDateTime(
+                courseDateForWeek(startDate, week, course.dayOfWeek),
+                course.startNode,
+              ),
+            ),
+        ];
+        buffer.writeln('RDATE;TZID=Asia/Shanghai:${extraDates.join(',')}');
+      }
       buffer.writeln('END:VEVENT');
     }
     buffer.writeln('END:VCALENDAR');
     return buffer.toString();
   }
 
+  String _escapeIcsText(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll('\n', r'\n')
+      .replaceAll(';', r'\;')
+      .replaceAll(',', r'\,');
+
+  String _unescapeIcsText(String value) => value.replaceAllMapped(
+    RegExp(r'\\([\\nN;,])'),
+    (match) => match.group(1)!.toLowerCase() == 'n' ? '\n' : match.group(1)!,
+  );
+
   DateTime? _parseIcsDateTime(String value) {
-    try {
-      if (value.endsWith('Z')) {
-        return DateFormat("yyyyMMdd'T'HHmmss'Z'").parseUtc(value).toLocal();
-      }
-      return DateFormat("yyyyMMdd'T'HHmmss").parseStrict(value);
-    } catch (_) {
-      try {
-        return DateFormat('yyyyMMdd').parseStrict(value);
-      } catch (_) {
-        return null;
-      }
+    final match = RegExp(
+      r'^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$',
+    ).firstMatch(value);
+    if (match == null) return null;
+    final year = int.parse(match[1]!);
+    final month = int.parse(match[2]!);
+    final day = int.parse(match[3]!);
+    final hour = int.parse(match[4] ?? '0');
+    final minute = int.parse(match[5] ?? '0');
+    final second = int.parse(match[6] ?? '0');
+    if (year < 1 ||
+        month < 1 ||
+        month > 12 ||
+        day < 1 ||
+        day > 31 ||
+        hour > 23 ||
+        minute > 59 ||
+        second > 59) {
+      return null;
     }
+    final utc = match[7] != null;
+    final date = utc
+        ? DateTime.utc(year, month, day, hour, minute, second)
+        : DateTime(year, month, day, hour, minute, second);
+    if (date.year != year ||
+        date.month != month ||
+        date.day != day ||
+        date.hour != hour ||
+        date.minute != minute ||
+        date.second != second) {
+      return null;
+    }
+    return utc ? date.toLocal() : date;
   }
 
   String _formatIcsDateTime(DateTime dt) {
