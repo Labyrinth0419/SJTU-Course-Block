@@ -53,6 +53,12 @@ class _Rows extends DatabaseHelper {
   int nextId = 1;
 
   @override
+  Future<List<Schedule>> getAllSchedules() async => [_schedule];
+
+  @override
+  Future<Schedule?> getCurrentSchedule() async => _schedule;
+
+  @override
   Future<int> insertCourse(Course course) async {
     final id = course.id ?? nextId++;
     rows[id] = {...course.toMap(), 'id': id};
@@ -68,6 +74,18 @@ class _Rows extends DatabaseHelper {
 
   @override
   Future<int> deleteCourse(int id) async => rows.remove(id) == null ? 0 : 1;
+
+  @override
+  Future<Course?> getCourseById(int id) async =>
+      rows[id] == null ? null : Course.fromMap(rows[id]!);
+
+  @override
+  Future<int> updateCourseColor(int id, String color) async {
+    final row = rows[id];
+    if (row == null) return 0;
+    rows[id] = {...row, 'color': color};
+    return 1;
+  }
 
   @override
   Future<List<Course>> getCoursesBySchedule(int scheduleId) async => rows.values

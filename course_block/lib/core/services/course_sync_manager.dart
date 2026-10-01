@@ -8,18 +8,30 @@ import 'course_service.dart';
 import 'course_sync_merge.dart';
 import 'login_session.dart';
 
+class SemesterStartDateRequiredException extends CourseSyncException {
+  const SemesterStartDateRequiredException()
+    : super('请先选择该学期第一周的开学日期，再创建课表并同步。');
+}
+
+class AmbiguousSemesterSyncException extends CourseSyncException {
+  AmbiguousSemesterSyncException(String year, String term)
+    : super('学期 $year-$term 有多个课表；请先切换到要同步的课表，再重试。');
+}
+
 class CourseSyncExecutionResult {
   const CourseSyncExecutionResult({
     required this.report,
     required this.currentSchedule,
     required this.schedules,
     required this.courses,
+    this.createdSchedule = false,
   });
 
   final CourseSyncReport report;
   final Schedule? currentSchedule;
   final List<Schedule> schedules;
   final List<Course> courses;
+  final bool createdSchedule;
 }
 
 class CourseSyncManager {
@@ -40,7 +52,11 @@ class CourseSyncManager {
     required List<Course> courses,
     required AppCourseColorPalette courseColorPalette,
     required String defaultScheduleName,
-  }) async {
+    DateTime? startDate,
+  }) => _databaseHelper.withCourseWriteLock(() async {
+    // Full requests are ordered at invocation, not at fetch completion: an
+    // older response must never apply after a newer one. Network wait holds
+    // this lane, so local writes may wait for a slow sync.
     final syncSystems = await _resolveSyncSystemOrder();
     CourseFetchResult? fetchResult;
     CourseFetchResult? lastEmptyResult;
@@ -120,41 +136,67 @@ class CourseSyncManager {
       );
     }
 
-    var nextCurrentSchedule = currentSchedule;
-    var nextSchedules = [...schedules];
-    final termLabel = _buildTermLabel(year, term);
+    // Target resolution and creation run against persisted schedules inside
+    // the same lane as the course merge, not against a caller's stale cache.
+    final persistedSchedules = await _databaseHelper.getAllSchedules();
+    final persistedCurrent = await _databaseHelper.getCurrentSchedule();
+    final matches = persistedSchedules
+        .where((schedule) => schedule.year == year && schedule.term == term)
+        .toList();
+    final preferredId =
+        persistedCurrent?.year == year && persistedCurrent?.term == term
+        ? persistedCurrent?.id
+        : currentSchedule?.id;
+    Schedule? nextCurrentSchedule;
+    for (final match in matches) {
+      if (match.id == preferredId) nextCurrentSchedule = match;
+    }
+    if (nextCurrentSchedule == null && matches.length == 1) {
+      nextCurrentSchedule = matches.single;
+    }
+    if (nextCurrentSchedule == null && matches.length > 1) {
+      throw AmbiguousSemesterSyncException(year, term);
+    }
 
-    if (nextCurrentSchedule == null) {
-      final now = DateTime.now();
-      final today = normalizeDate(now);
-      final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
-
-      final newSchedule = Schedule(
-        name: '$year-$term 学期',
+    var createdSchedule = false;
+    final placeholder =
+        persistedSchedules.length == 1 &&
+            persistedSchedules.single.name == defaultScheduleName
+        ? persistedSchedules.single
+        : null;
+    final bindsPlaceholder =
+        placeholder != null &&
+        (nextCurrentSchedule == null ||
+            nextCurrentSchedule.id == placeholder.id) &&
+        (await _databaseHelper.getCoursesBySchedule(placeholder.id!)).isEmpty;
+    if (bindsPlaceholder) {
+      if (startDate == null) throw const SemesterStartDateRequiredException();
+      nextCurrentSchedule = placeholder.copyWith(
+        name: _buildScheduleName(year, term),
         year: year,
         term: term,
-        startDate: startOfWeek,
+        startDate: normalizeDate(startDate),
+        isCurrent: true,
+      );
+      await _databaseHelper.updateSchedule(nextCurrentSchedule);
+    } else if (nextCurrentSchedule == null) {
+      if (startDate == null) throw const SemesterStartDateRequiredException();
+      final newSchedule = Schedule(
+        name: _buildScheduleName(year, term),
+        year: year,
+        term: term,
+        startDate: normalizeDate(startDate),
         isCurrent: true,
       );
       final id = await _databaseHelper.insertSchedule(newSchedule);
       nextCurrentSchedule = newSchedule.copyWith(id: id);
-      nextSchedules = _upsertScheduleCache(nextSchedules, nextCurrentSchedule);
-    } else if (nextCurrentSchedule.year != year ||
-        nextCurrentSchedule.term != term) {
-      nextCurrentSchedule = nextCurrentSchedule.copyWith(
-        year: year,
-        term: term,
-        name:
-            _usesGeneratedScheduleName(
-              nextCurrentSchedule,
-              defaultScheduleName: defaultScheduleName,
-            )
-            ? _buildScheduleName(year, term)
-            : nextCurrentSchedule.name,
-      );
-      await _databaseHelper.updateSchedule(nextCurrentSchedule);
-      nextSchedules = _upsertScheduleCache(nextSchedules, nextCurrentSchedule);
+      createdSchedule = true;
+    } else if (nextCurrentSchedule.id != persistedCurrent?.id) {
+      await _databaseHelper.setCurrentSchedule(nextCurrentSchedule.id!);
     }
+    final nextSchedules = await _databaseHelper.getAllSchedules();
+    nextCurrentSchedule = nextCurrentSchedule.copyWith(isCurrent: true);
+    final termLabel = _buildTermLabel(year, term);
 
     if (nextCurrentSchedule.id == null) {
       return CourseSyncExecutionResult(
@@ -274,8 +316,9 @@ class CourseSyncManager {
       currentSchedule: nextCurrentSchedule,
       schedules: nextSchedules,
       courses: persistedCourses,
+      createdSchedule: createdSchedule,
     );
-  }
+  });
 
   Future<List<AcademicLoginSystem>> _resolveSyncSystemOrder() async {
     final availableSystems = await LoginSessionStorage.loadAvailableSystems();
@@ -310,27 +353,6 @@ class CourseSyncManager {
       _ => '第1学期（秋季）',
     };
     return '$year~$nextYear $termLabel';
-  }
-
-  bool _usesGeneratedScheduleName(
-    Schedule schedule, {
-    required String defaultScheduleName,
-  }) {
-    return schedule.name == defaultScheduleName ||
-        schedule.name == _buildScheduleName(schedule.year, schedule.term);
-  }
-
-  List<Schedule> _upsertScheduleCache(
-    List<Schedule> schedules,
-    Schedule schedule,
-  ) {
-    final nextSchedules = [...schedules];
-    final index = nextSchedules.indexWhere((item) => item.id == schedule.id);
-    if (index >= 0) {
-      nextSchedules[index] = schedule;
-      return nextSchedules;
-    }
-    return [...nextSchedules, schedule];
   }
 
   Course _bindFetchedCourseToSchedule(Course course, int scheduleId) {

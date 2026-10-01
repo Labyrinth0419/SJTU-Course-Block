@@ -42,6 +42,12 @@ class _Database extends DatabaseHelper {
   int nextId = 1;
 
   @override
+  Future<List<Schedule>> getAllSchedules() async => [_schedule];
+
+  @override
+  Future<Schedule?> getCurrentSchedule() async => _schedule;
+
+  @override
   Future<int> insertCourse(Course course) async {
     final id = course.id ?? nextId++;
     if (id >= nextId) nextId = id + 1;

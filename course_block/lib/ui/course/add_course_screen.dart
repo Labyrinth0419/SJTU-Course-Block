@@ -427,35 +427,42 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
             isVirtual: _isVirtual,
             color: colorValue,
           )
-        : original
-              .withUserEdits(
-                original.copyWith(
-                  scheduleId: scheduleId,
-                  courseName: _nameController.text.trim(),
-                  teacher: _teacherController.text.trim(),
-                  classRoom: _roomController.text.trim(),
-                  dayOfWeek: _dayOfWeek,
-                  startNode: _startNode,
-                  step: _step,
-                  startWeek: _startWeek,
-                  endWeek: _endWeek,
-                  weekCode:
-                      (_startWeek != original.startWeek ||
-                          _endWeek != original.endWeek)
-                      ? null
-                      : original.weekCode,
-                  isVirtual: _isVirtual,
-                  // Derived auto-palette colors are not an explicit user edit.
-                  color: _colorManuallySelected ? colorValue : original.color,
-                ),
-              )
-              .copyWith(color: colorValue);
+        : original.copyWith(
+            courseName: _nameController.text.trim(),
+            teacher: _teacherController.text.trim(),
+            classRoom: _roomController.text.trim(),
+            dayOfWeek: _dayOfWeek,
+            startNode: _startNode,
+            step: _step,
+            startWeek: _startWeek,
+            endWeek: _endWeek,
+            isVirtual: _isVirtual,
+            // Only a chosen color is an explicit user override.
+            color: _colorManuallySelected ? colorValue : original.color,
+          );
 
     final db = widget.databaseHelper ?? DatabaseHelper.instance;
     if (original == null) {
       await db.insertCourse(course);
     } else {
-      await db.updateCourse(course);
+      final identityChanged =
+          course.courseName != original.courseName ||
+          course.teacher != original.teacher;
+      final updated = await db.updateCourseFromEditor(
+        original: original,
+        submitted: course,
+        derivedColor: !_colorManuallySelected && identityChanged
+            ? colorValue
+            : null,
+      );
+      if (updated == 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('课程已删除，无法保存修改。')));
+        }
+        return;
+      }
     }
 
     if (mounted) {

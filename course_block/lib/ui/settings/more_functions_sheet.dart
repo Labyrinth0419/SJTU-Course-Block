@@ -757,6 +757,7 @@ Future<void> _showManualSyncDialog(BuildContext context) async {
 
   String year = currentSchedule?.year ?? currentYear.toString();
   String term = currentSchedule?.term ?? '1';
+  DateTime? startDate;
   final years = List.generate(
     2050 - 1996 + 1,
     (index) => 1996 + index,
@@ -764,66 +765,121 @@ Future<void> _showManualSyncDialog(BuildContext context) async {
 
   await showDialog<void>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('同步其他学期'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DropdownButtonFormField<String>(
-            initialValue: year,
-            decoration: const InputDecoration(labelText: '学年'),
-            menuMaxHeight: 320,
-            items: years
-                .map(
-                  (item) => DropdownMenuItem(
-                    value: item.toString(),
-                    child: Text('$item~${item + 1}'),
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) {
+        final matches = provider.schedules
+            .where((schedule) => schedule.year == year && schedule.term == term)
+            .toList();
+        final requiresStartDate =
+            matches.isEmpty ||
+            (matches.length == 1 &&
+                provider.schedules.length == 1 &&
+                matches.single.name == CourseProvider.defaultScheduleName &&
+                provider.courses.isEmpty);
+        return AlertDialog(
+          title: const Text('同步其他学期'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: year,
+                decoration: const InputDecoration(labelText: '学年'),
+                menuMaxHeight: 320,
+                items: years
+                    .map(
+                      (item) => DropdownMenuItem(
+                        value: item.toString(),
+                        child: Text('$item~${item + 1}'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setDialogState(() {
+                      year = value;
+                      startDate = null;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: term,
+                decoration: const InputDecoration(labelText: '学期'),
+                items: const [
+                  DropdownMenuItem(value: '1', child: Text('第1学期（秋季）')),
+                  DropdownMenuItem(value: '2', child: Text('第2学期（春季）')),
+                  DropdownMenuItem(value: '3', child: Text('第3学期（夏季）')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setDialogState(() {
+                      term = value;
+                      startDate = null;
+                    });
+                  }
+                },
+              ),
+              if (requiresStartDate) ...[
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.event_note),
+                  title: const Text('开学第一周日期（必选）'),
+                  subtitle: Text(
+                    startDate == null
+                        ? '请选择该学期第一周的日期'
+                        : startDate!.toIso8601String().split('T').first,
                   ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) {
-                year = value;
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: term,
-            decoration: const InputDecoration(labelText: '学期'),
-            items: const [
-              DropdownMenuItem(value: '1', child: Text('第1学期（秋季）')),
-              DropdownMenuItem(value: '2', child: Text('第2学期（春季）')),
-              DropdownMenuItem(value: '3', child: Text('第3学期（夏季）')),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: dialogContext,
+                      initialDate: startDate ?? DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                      locale: const Locale('zh', 'CN'),
+                    );
+                    if (picked != null) {
+                      setDialogState(() => startDate = picked);
+                    }
+                  },
+                ),
+              ],
+              if (matches.length > 1 &&
+                  !matches.any(
+                    (schedule) => schedule.id == currentSchedule?.id,
+                  ))
+                const Text('此学期有多个课表，请先切换到要同步的课表。'),
             ],
-            onChanged: (value) {
-              if (value != null) {
-                term = value;
-              }
-            },
           ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () async {
-            Navigator.pop(dialogContext);
-            try {
-              final report = await provider.syncCourses(year, term);
-              if (!context.mounted) return;
-              await _showSyncReport(context, report);
-            } on CourseSyncException catch (e) {
-              if (!context.mounted) return;
-              await _showSyncError(context, e);
-            }
-          },
-          child: const Text('同步'),
-        ),
-      ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: requiresStartDate && startDate == null
+                  ? null
+                  : () async {
+                      Navigator.pop(dialogContext);
+                      try {
+                        final report = await provider.syncCourses(
+                          year,
+                          term,
+                          startDate: startDate,
+                        );
+                        if (!context.mounted) return;
+                        await _showSyncReport(context, report);
+                      } on CourseSyncException catch (e) {
+                        if (!context.mounted) return;
+                        await _showSyncError(context, e);
+                      }
+                    },
+              child: const Text('同步'),
+            ),
+          ],
+        );
+      },
     ),
   );
 }
