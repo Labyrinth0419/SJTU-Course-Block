@@ -84,7 +84,7 @@ class CourseProvider extends ChangeNotifier {
   final CourseSettingsStore _courseSettingsStore;
   final DateTime Function() _now;
   final CourseSyncManager _courseSyncManager;
-  final CourseTransferManager _courseTransferManager = CourseTransferManager();
+  final CourseTransferManager _courseTransferManager;
   final PerformanceTestDataService _performanceTestDataService =
       PerformanceTestDataService();
   Timer? _widgetUpdateTimer;
@@ -102,11 +102,14 @@ class CourseProvider extends ChangeNotifier {
     CourseScheduleManager? courseScheduleManager,
     CourseSettingsStore? courseSettingsStore,
     CourseSyncManager? courseSyncManager,
+    CourseTransferManager? courseTransferManager,
     DateTime Function()? now,
   }) : _courseScheduleManager =
            courseScheduleManager ?? CourseScheduleManager(),
        _courseSettingsStore = courseSettingsStore ?? CourseSettingsStore(),
        _courseSyncManager = courseSyncManager ?? CourseSyncManager(),
+       _courseTransferManager =
+           courseTransferManager ?? CourseTransferManager(),
        _now = now ?? DateTime.now {
     _appSettingsTail = _loadAppSettings().catchError((Object error) {
       debugPrint('Error loading app settings: $error');
@@ -160,8 +163,11 @@ class CourseProvider extends ChangeNotifier {
     return _courseSettingsStore.getAvailableLauncherIcons();
   }
 
-  Future<void> _seedCurrentScheduleSettings(int targetScheduleId) async {
-    final sourceId = _currentSchedule?.id;
+  Future<void> _seedCurrentScheduleSettings(
+    int targetScheduleId, {
+    int? sourceScheduleId,
+  }) async {
+    final sourceId = sourceScheduleId ?? _currentSchedule?.id;
     if (sourceId == null) return;
     final pending = _scheduleSettingsTails[sourceId];
     if (pending != null) await pending;
@@ -240,12 +246,15 @@ class CourseProvider extends ChangeNotifier {
       }
 
       final oldScheduleId = _currentSchedule?.id;
+      final oldStartDate = _currentSchedule?.startDate;
       _schedules = schedules;
       _currentSchedule = currentSchedule;
       _courses = normalizedCourses;
       _applyScheduleSettingsSnapshot(settings.snapshot);
       _clampCurrentWeek();
-      if (recalcWeek || currentSchedule?.id != oldScheduleId) {
+      if (recalcWeek ||
+          currentSchedule?.id != oldScheduleId ||
+          currentSchedule?.startDate != oldStartDate) {
         _recalculateWeekFromCurrentSchedule();
       }
       return;
@@ -375,7 +384,12 @@ class CourseProvider extends ChangeNotifier {
     return syncCourses(schedule.year, schedule.term);
   }
 
-  Future<CourseSyncReport> syncCourses(String year, String term) async {
+  Future<CourseSyncReport> syncCourses(
+    String year,
+    String term, {
+    DateTime? startDate,
+  }) async {
+    final sourceScheduleId = _currentSchedule?.id;
     final generation = ++_stateRequestGeneration;
     if (!_disposed) {
       _isLoading = true;
@@ -391,7 +405,16 @@ class CourseProvider extends ChangeNotifier {
         courses: _courses,
         courseColorPalette: _courseColorPalette,
         defaultScheduleName: defaultScheduleName,
+        startDate: startDate,
       );
+      if (result.createdSchedule &&
+          result.currentSchedule?.id != null &&
+          sourceScheduleId != null) {
+        await _seedCurrentScheduleSettings(
+          result.currentSchedule!.id!,
+          sourceScheduleId: sourceScheduleId,
+        );
+      }
 
       await _applyLoadedState(
         generation: generation,

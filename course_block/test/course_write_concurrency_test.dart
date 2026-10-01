@@ -46,6 +46,7 @@ class _Rows extends DatabaseHelper {
   final rows = <int, Map<String, dynamic>>{};
   int nextId = 1;
   int nextScheduleId = 1;
+  bool hasExistingSchedule = true;
   Schedule? currentSchedule;
   Completer<void>? firstReadStarted;
   Completer<void>? releaseFirstRead;
@@ -53,12 +54,18 @@ class _Rows extends DatabaseHelper {
   int reads = 0;
 
   @override
-  Future<Schedule?> getCurrentSchedule() async => currentSchedule;
+  Future<Schedule?> getCurrentSchedule() async =>
+      hasExistingSchedule ? (currentSchedule ?? _schedule) : null;
+
+  @override
+  Future<List<Schedule>> getAllSchedules() async =>
+      hasExistingSchedule ? [currentSchedule ?? _schedule] : [];
 
   @override
   Future<int> insertSchedule(Schedule schedule) =>
       withCourseWriteLock(() async {
         final id = nextScheduleId++;
+        hasExistingSchedule = true;
         currentSchedule = schedule.copyWith(id: id);
         return id;
       });
@@ -166,6 +173,7 @@ void main() {
             courses: [],
             courseColorPalette: AppCourseColorPalette.candyBox,
             defaultScheduleName: '默认课表',
+            startDate: noSchedule ? _schedule.startDate : null,
           );
 
   setUp(() {
@@ -199,6 +207,7 @@ void main() {
   });
 
   test('two first syncs create one schedule and one course', () async {
+    db.hasExistingSchedule = false;
     final first = runSync(null, true);
     final second = runSync(null, true);
     final reports = await Future.wait([first, second]);

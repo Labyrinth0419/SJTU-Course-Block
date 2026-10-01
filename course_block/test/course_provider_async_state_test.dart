@@ -173,6 +173,7 @@ class _SyncManager extends CourseSyncManager {
     required List<Course> courses,
     required AppCourseColorPalette courseColorPalette,
     required String defaultScheduleName,
+    DateTime? startDate,
   }) => syncs.removeFirst().future;
 }
 
