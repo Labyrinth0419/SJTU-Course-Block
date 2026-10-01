@@ -80,18 +80,34 @@ class CourseProvider extends ChangeNotifier {
   String? _launcherIcon;
   String? get launcherIcon => _launcherIcon;
 
-  final CourseScheduleManager _courseScheduleManager = CourseScheduleManager();
-  final CourseSettingsStore _courseSettingsStore = CourseSettingsStore();
-  final CourseSyncManager _courseSyncManager = CourseSyncManager();
+  final CourseScheduleManager _courseScheduleManager;
+  final CourseSettingsStore _courseSettingsStore;
+  final CourseSyncManager _courseSyncManager;
   final CourseTransferManager _courseTransferManager = CourseTransferManager();
   final PerformanceTestDataService _performanceTestDataService =
       PerformanceTestDataService();
   Timer? _widgetUpdateTimer;
   int _widgetUpdateGeneration = 0;
   bool _widgetUpdateInFlight = false;
+  bool _disposed = false;
+  int _stateRequestGeneration = 0;
+  AppSettingsSnapshot _appSettingsSnapshot = const AppSettingsSnapshot();
+  late Future<void> _appSettingsTail;
+  final Map<int, Future<void>> _scheduleSettingsTails = {};
+  final Map<int, int> _scheduleSettingsRevisions = {};
+  final Map<int, ScheduleSettingsSnapshot> _scheduleSettingsSnapshots = {};
 
-  CourseProvider() {
-    _loadAppSettings();
+  CourseProvider({
+    CourseScheduleManager? courseScheduleManager,
+    CourseSettingsStore? courseSettingsStore,
+    CourseSyncManager? courseSyncManager,
+  }) : _courseScheduleManager =
+           courseScheduleManager ?? CourseScheduleManager(),
+       _courseSettingsStore = courseSettingsStore ?? CourseSettingsStore(),
+       _courseSyncManager = courseSyncManager ?? CourseSyncManager() {
+    _appSettingsTail = _loadAppSettings().catchError((Object error) {
+      debugPrint('Error loading app settings: $error');
+    });
   }
 
   void _clampCurrentWeek() {
@@ -115,33 +131,6 @@ class CourseProvider extends ChangeNotifier {
     ).difference(normalizeDate(schedule.startDate)).inDays;
     _currentWeek = (diff / 7).floor() + 1;
     _clampCurrentWeek();
-  }
-
-  AppSettingsSnapshot _currentAppSettingsSnapshot() {
-    return AppSettingsSnapshot(
-      themeMode: _themeMode,
-      themeScheme: _themeScheme,
-      courseColorPalette: _courseColorPalette,
-      launcherIcon: _launcherIcon,
-    );
-  }
-
-  ScheduleSettingsSnapshot _currentScheduleSettingsSnapshot() {
-    return ScheduleSettingsSnapshot(
-      showGridLines: _showGridLines,
-      showNonCurrentWeek: _showNonCurrentWeek,
-      showSaturday: _showSaturday,
-      showSunday: _showSunday,
-      outlineText: _outlineText,
-      maxDailyClasses: _maxDailyClasses,
-      totalWeeks: _totalWeeks,
-      gridHeight: _gridHeight,
-      cornerRadius: _cornerRadius,
-      backgroundColorLight: _backgroundColorLight,
-      backgroundColorDark: _backgroundColorDark,
-      backgroundImagePath: _backgroundImagePath,
-      backgroundImageOpacity: _backgroundImageOpacity,
-    );
   }
 
   void _applyAppSettingsSnapshot(AppSettingsSnapshot snapshot) {
@@ -171,10 +160,17 @@ class CourseProvider extends ChangeNotifier {
     return _courseSettingsStore.getAvailableLauncherIcons();
   }
 
-  Future<void> _seedCurrentScheduleSettings(int targetScheduleId) {
-    return _courseSettingsStore.seedScheduleSettings(
+  Future<void> _seedCurrentScheduleSettings(int targetScheduleId) async {
+    final sourceId = _currentSchedule?.id;
+    if (sourceId == null) return;
+    final pending = _scheduleSettingsTails[sourceId];
+    if (pending != null) await pending;
+    final sourceSettings =
+        _scheduleSettingsSnapshots[sourceId] ??
+        await _courseSettingsStore.loadScheduleSettings(sourceId);
+    await _courseSettingsStore.seedScheduleSettings(
       targetScheduleId,
-      _currentScheduleSettingsSnapshot(),
+      sourceSettings,
     );
   }
 
@@ -184,50 +180,128 @@ class CourseProvider extends ChangeNotifier {
 
   Future<void> _loadAppSettings() async {
     final snapshot = await _courseSettingsStore.loadAppSettings();
+    _appSettingsSnapshot = snapshot;
+    if (_disposed) return;
     _applyAppSettingsSnapshot(snapshot);
     notifyListeners();
   }
 
-  Future<void> _loadCurrentScheduleSettings({bool notify = true}) async {
-    final snapshot = await _courseSettingsStore.loadScheduleSettings(
-      _currentSchedule?.id,
-    );
-    _applyScheduleSettingsSnapshot(snapshot);
-    _clampCurrentWeek();
+  bool _isCurrentStateRequest(int generation) =>
+      !_disposed && generation == _stateRequestGeneration;
 
-    if (notify) {
+  int _settingsRevision(int? scheduleId) =>
+      _scheduleSettingsRevisions[scheduleId] ?? 0;
+
+  Future<({ScheduleSettingsSnapshot snapshot, int revision})?>
+  _loadCurrentScheduleSettings(int? scheduleId, int generation) async {
+    while (_isCurrentStateRequest(generation)) {
+      final revision = _settingsRevision(scheduleId);
+      final pending = _scheduleSettingsTails[scheduleId];
+      if (pending != null) await pending;
+      if (!_isCurrentStateRequest(generation)) return null;
+      if (revision != _settingsRevision(scheduleId)) continue;
+
+      final snapshot = await _courseSettingsStore.loadScheduleSettings(
+        scheduleId,
+      );
+      if (!_isCurrentStateRequest(generation)) return null;
+      if (revision == _settingsRevision(scheduleId)) {
+        if (scheduleId != null) {
+          _scheduleSettingsSnapshots[scheduleId] = snapshot;
+        }
+        return (snapshot: snapshot, revision: revision);
+      }
+    }
+    return null;
+  }
+
+  Future<void> _applyLoadedState({
+    required int generation,
+    required List<Schedule> schedules,
+    required Schedule? currentSchedule,
+    required List<Course> courses,
+    required bool recalcWeek,
+  }) async {
+    if (!_isCurrentStateRequest(generation)) return;
+    final normalizedCourses = await _courseScheduleManager
+        .normalizeCourseColors(
+          courses: courses,
+          courseColorPalette: _courseColorPalette,
+        );
+
+    while (_isCurrentStateRequest(generation)) {
+      final settings = await _loadCurrentScheduleSettings(
+        currentSchedule?.id,
+        generation,
+      );
+      if (settings == null || !_isCurrentStateRequest(generation)) return;
+      if (settings.revision != _settingsRevision(currentSchedule?.id)) {
+        continue;
+      }
+
+      final oldScheduleId = _currentSchedule?.id;
+      _schedules = schedules;
+      _currentSchedule = currentSchedule;
+      _courses = normalizedCourses;
+      _applyScheduleSettingsSnapshot(settings.snapshot);
+      _clampCurrentWeek();
+      if (recalcWeek || currentSchedule?.id != oldScheduleId) {
+        _recalculateWeekFromCurrentSchedule();
+      }
+      return;
+    }
+  }
+
+  Future<void> updateAppSetting(String key, dynamic value) {
+    if (_disposed) return Future.value();
+    final operation = _appSettingsTail.then((_) async {
+      final result = await _courseSettingsStore.updateAppSetting(
+        key: key,
+        value: value,
+        current: _appSettingsSnapshot,
+      );
+      _appSettingsSnapshot = result.snapshot;
+      if (_disposed) return;
+      _applyAppSettingsSnapshot(result.snapshot);
       notifyListeners();
-    }
-  }
-
-  Future<void> updateAppSetting(String key, dynamic value) async {
-    final result = await _courseSettingsStore.updateAppSetting(
-      key: key,
-      value: value,
-      current: _currentAppSettingsSnapshot(),
+      if (result.shouldRefreshWidgets) await _updateWidgetsSafe();
+    });
+    // Only the queue tail handles errors; the caller still receives the failure.
+    _appSettingsTail = operation.then(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
     );
-    _applyAppSettingsSnapshot(result.snapshot);
-    notifyListeners();
-    if (result.shouldRefreshWidgets) {
-      await _updateWidgetsSafe();
-    }
+    return operation;
   }
 
-  Future<void> updateCurrentScheduleSetting(String key, dynamic value) async {
+  Future<void> updateCurrentScheduleSetting(String key, dynamic value) {
     final scheduleId = _currentSchedule?.id;
-    if (scheduleId == null) return;
+    if (_disposed || scheduleId == null) return Future.value();
 
-    final snapshot = await _courseSettingsStore.updateScheduleSetting(
-      scheduleId: scheduleId,
-      key: key,
-      value: value,
-      current: _currentScheduleSettingsSnapshot(),
+    _scheduleSettingsRevisions[scheduleId] = _settingsRevision(scheduleId) + 1;
+    final previous = _scheduleSettingsTails[scheduleId] ?? Future<void>.value();
+    final operation = previous.then((_) async {
+      final current =
+          _scheduleSettingsSnapshots[scheduleId] ??
+          await _courseSettingsStore.loadScheduleSettings(scheduleId);
+      final snapshot = await _courseSettingsStore.updateScheduleSetting(
+        scheduleId: scheduleId,
+        key: key,
+        value: value,
+        current: current,
+      );
+      _scheduleSettingsSnapshots[scheduleId] = snapshot;
+      if (_disposed || _currentSchedule?.id != scheduleId) return;
+      _applyScheduleSettingsSnapshot(snapshot);
+      _clampCurrentWeek();
+      notifyListeners();
+      await _updateWidgetsSafe();
+    });
+    _scheduleSettingsTails[scheduleId] = operation.then(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
     );
-    _applyScheduleSettingsSnapshot(snapshot);
-    _clampCurrentWeek();
-
-    notifyListeners();
-    await _updateWidgetsSafe();
+    return operation;
   }
 
   Future<void> updateSetting(String key, dynamic value) async {
@@ -239,35 +313,31 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> loadCourses({bool recalcWeek = true}) async {
+    if (_disposed) return;
     debugPrint('CourseProvider.loadCourses called');
+    final generation = ++_stateRequestGeneration;
     _isLoading = true;
     notifyListeners();
 
     try {
-      final oldScheduleId = _currentSchedule?.id;
       final scheduleState = await _courseScheduleManager.loadScheduleState(
         defaultScheduleName: defaultScheduleName,
       );
-      _schedules = scheduleState.schedules;
-      _currentSchedule = scheduleState.currentSchedule;
-      _courses = scheduleState.courses;
-
-      await _loadCurrentScheduleSettings(notify: false);
-
-      if (recalcWeek || _currentSchedule?.id != oldScheduleId) {
-        _recalculateWeekFromCurrentSchedule();
-      }
-
-      _courses = await _courseScheduleManager.normalizeCourseColors(
-        courses: _courses,
-        courseColorPalette: _courseColorPalette,
+      await _applyLoadedState(
+        generation: generation,
+        schedules: scheduleState.schedules,
+        currentSchedule: scheduleState.currentSchedule,
+        courses: scheduleState.courses,
+        recalcWeek: recalcWeek,
       );
     } catch (e) {
       debugPrint('Error loading courses/schedules: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
-      _updateWidgetsSafe();
+      if (_isCurrentStateRequest(generation)) {
+        _isLoading = false;
+        notifyListeners();
+        _updateWidgetsSafe();
+      }
     }
   }
 
@@ -306,10 +376,12 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<CourseSyncReport> syncCourses(String year, String term) async {
-    _isLoading = true;
-    notifyListeners();
+    final generation = ++_stateRequestGeneration;
+    if (!_disposed) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
-    final oldScheduleId = _currentSchedule?.id;
     try {
       final result = await _courseSyncManager.syncCourses(
         year: year,
@@ -321,20 +393,13 @@ class CourseProvider extends ChangeNotifier {
         defaultScheduleName: defaultScheduleName,
       );
 
-      _currentSchedule = result.currentSchedule;
-      _schedules = result.schedules;
-      _courses = result.courses;
-
-      if (_currentSchedule?.id != oldScheduleId) {
-        await _loadCurrentScheduleSettings(notify: false);
-        _recalculateWeekFromCurrentSchedule();
-      }
-
-      _courses = await _courseScheduleManager.normalizeCourseColors(
-        courses: _courses,
-        courseColorPalette: _courseColorPalette,
+      await _applyLoadedState(
+        generation: generation,
+        schedules: result.schedules,
+        currentSchedule: result.currentSchedule,
+        courses: result.courses,
+        recalcWeek: false,
       );
-
       return result.report;
     } catch (e) {
       if (e is CourseSyncException) {
@@ -357,13 +422,16 @@ class CourseProvider extends ChangeNotifier {
         ],
       );
     } finally {
-      _isLoading = false;
-      notifyListeners();
-      _updateWidgetsSafe();
+      if (_isCurrentStateRequest(generation)) {
+        _isLoading = false;
+        notifyListeners();
+        _updateWidgetsSafe();
+      }
     }
   }
 
   void setCurrentWeek(int week) {
+    if (_disposed) return;
     if (week < 1) {
       week = 1;
     }
@@ -375,8 +443,17 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> switchSchedule(int scheduleId) async {
-    await _courseScheduleManager.switchSchedule(scheduleId);
-    await loadCourses();
+    final generation = ++_stateRequestGeneration;
+    try {
+      await _courseScheduleManager.switchSchedule(scheduleId);
+    } catch (_) {
+      if (_isCurrentStateRequest(generation) && _isLoading) {
+        _isLoading = false;
+        notifyListeners();
+      }
+      rethrow;
+    }
+    if (_isCurrentStateRequest(generation)) await loadCourses();
   }
 
   Future<void> addSchedule(
@@ -483,6 +560,7 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> _updateWidgetsSafe() async {
+    if (_disposed) return;
     _widgetUpdateGeneration++;
     _widgetUpdateTimer?.cancel();
     _widgetUpdateTimer = Timer(
@@ -492,7 +570,7 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> _flushWidgetUpdate() async {
-    if (_widgetUpdateInFlight) {
+    if (_disposed || _widgetUpdateInFlight) {
       return;
     }
 
@@ -511,7 +589,7 @@ class CourseProvider extends ChangeNotifier {
       debugPrint('Widget update error: $e');
     } finally {
       _widgetUpdateInFlight = false;
-      if (generation != _widgetUpdateGeneration) {
+      if (!_disposed && generation != _widgetUpdateGeneration) {
         _widgetUpdateTimer?.cancel();
         _widgetUpdateTimer = Timer(
           const Duration(milliseconds: 180),
@@ -523,6 +601,8 @@ class CourseProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    ++_stateRequestGeneration;
     _widgetUpdateTimer?.cancel();
     super.dispose();
   }
