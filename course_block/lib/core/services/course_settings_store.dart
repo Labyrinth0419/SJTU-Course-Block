@@ -171,7 +171,36 @@ class CourseSettingsStore {
     'flutter',
   };
 
+  static const Set<String> _floatSettingKeys = {
+    gridHeightKey,
+    cornerRadiusKey,
+    backgroundImageOpacityKey,
+  };
+
+  static bool isValidFloatSetting(String key, Object? value) {
+    if (value is! double || !value.isFinite) return false;
+    return switch (key) {
+      // The grid uses up to 20 rows and adds its 60 dp header to the height.
+      gridHeightKey => value > 0 && (value * 20 + 60).isFinite,
+      cornerRadiusKey => value >= 0,
+      backgroundImageOpacityKey => value >= 0 && value <= 1,
+      _ => false,
+    };
+  }
+
   bool isAppSettingKey(String key) => _appSettingKeys.contains(key);
+
+  double _loadFloatSetting(
+    SharedPreferences prefs,
+    int scheduleId,
+    String key,
+    double fallback,
+  ) {
+    final scoped = prefs.get(schedulePrefKey(scheduleId, key));
+    if (isValidFloatSetting(key, scoped)) return scoped as double;
+    final legacy = prefs.get(key);
+    return isValidFloatSetting(key, legacy) ? legacy as double : fallback;
+  }
 
   String schedulePrefKey(int scheduleId, String key) =>
       'schedule_${scheduleId}_$key';
@@ -202,6 +231,16 @@ class CourseSettingsStore {
     int targetScheduleId,
     ScheduleSettingsSnapshot snapshot,
   ) async {
+    for (final (key, value) in [
+      (gridHeightKey, snapshot.gridHeight),
+      (cornerRadiusKey, snapshot.cornerRadius),
+      (backgroundImageOpacityKey, snapshot.backgroundImageOpacity),
+    ]) {
+      if (!isValidFloatSetting(key, value)) {
+        throw ArgumentError.value(value, key, 'Invalid schedule setting');
+      }
+    }
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(
       schedulePrefKey(targetScheduleId, showGridLinesKey),
@@ -320,14 +359,8 @@ class CourseSettingsStore {
           prefs.getInt(schedulePrefKey(scheduleId, totalWeeksKey)) ??
           prefs.getInt(totalWeeksKey) ??
           20,
-      gridHeight:
-          prefs.getDouble(schedulePrefKey(scheduleId, gridHeightKey)) ??
-          prefs.getDouble(gridHeightKey) ??
-          64.0,
-      cornerRadius:
-          prefs.getDouble(schedulePrefKey(scheduleId, cornerRadiusKey)) ??
-          prefs.getDouble(cornerRadiusKey) ??
-          4.0,
+      gridHeight: _loadFloatSetting(prefs, scheduleId, gridHeightKey, 64.0),
+      cornerRadius: _loadFloatSetting(prefs, scheduleId, cornerRadiusKey, 4.0),
       backgroundColorLight:
           prefs.getInt(schedulePrefKey(scheduleId, backgroundColorLightKey)) ??
           prefs.getInt(backgroundColorLightKey),
@@ -339,12 +372,12 @@ class CourseSettingsStore {
             schedulePrefKey(scheduleId, backgroundImagePathKey),
           ) ??
           prefs.getString(backgroundImagePathKey),
-      backgroundImageOpacity:
-          prefs.getDouble(
-            schedulePrefKey(scheduleId, backgroundImageOpacityKey),
-          ) ??
-          prefs.getDouble(backgroundImageOpacityKey) ??
-          0.3,
+      backgroundImageOpacity: _loadFloatSetting(
+        prefs,
+        scheduleId,
+        backgroundImageOpacityKey,
+        0.3,
+      ),
     );
   }
 
@@ -401,6 +434,10 @@ class CourseSettingsStore {
     required dynamic value,
     required ScheduleSettingsSnapshot current,
   }) async {
+    if (_floatSettingKeys.contains(key) && !isValidFloatSetting(key, value)) {
+      throw ArgumentError.value(value, key, 'Invalid schedule setting');
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final resolvedKey = schedulePrefKey(scheduleId, key);
 
