@@ -23,6 +23,7 @@ class ScheduleGrid extends StatelessWidget {
     required this.cornerRadius,
     required this.courseColorPalette,
     this.startDate,
+    this.now,
     required this.onRefreshRequested,
   });
 
@@ -39,6 +40,7 @@ class ScheduleGrid extends StatelessWidget {
   final double cornerRadius;
   final AppCourseColorPalette courseColorPalette;
   final DateTime? startDate;
+  final DateTime? now;
   final Future<void> Function() onRefreshRequested;
 
   @override
@@ -54,7 +56,7 @@ class ScheduleGrid extends StatelessWidget {
     // header cell, and precompute whether each course meets in the current week
     // so the (course, week) check isn't recomputed across filtering, layout and
     // rendering.
-    final DateTime now = DateTime.now();
+    final DateTime now = this.now ?? DateTime.now();
     bool isToday(DateTime date) =>
         date.year == now.year && date.month == now.month && date.day == now.day;
 
@@ -63,9 +65,9 @@ class ScheduleGrid extends StatelessWidget {
         course: _isCourseInWeek(course, currentWeek),
     };
 
-    final DateTime viewStartDate = (startDate ?? now).add(
-      Duration(days: (currentWeek - 1) * 7),
-    );
+    final DateTime anchorDate = startDate ?? now;
+    // Without a term start, the selected week has no calendar anchor.
+    final int displayWeek = startDate == null ? 1 : currentWeek;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -229,19 +231,21 @@ class ScheduleGrid extends StatelessWidget {
                             ),
                             Builder(
                               builder: (ctx) {
-                                final date = viewStartDate.add(
-                                  Duration(days: i),
+                                final date = courseDateForWeek(
+                                  anchorDate,
+                                  displayWeek,
+                                  i + 1,
                                 );
                                 var status = '';
                                 final termStartDate = startDate;
                                 if (termStartDate != null) {
-                                  if (date.isBefore(termStartDate)) {
+                                  final termWeek = courseWeekForDate(
+                                    termStartDate,
+                                    date,
+                                  );
+                                  if (termWeek < 1) {
                                     status = '(学期未开始)';
-                                  } else if (date.isAfter(
-                                    termStartDate.add(
-                                      Duration(days: totalWeeks * 7 - 1),
-                                    ),
-                                  )) {
+                                  } else if (termWeek > totalWeeks) {
                                     status = '(学期已结束)';
                                   }
                                 }
