@@ -21,11 +21,6 @@
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
-        <!-- dynamic icon service -->
-        <service
-            android:name="com.solusibejo.flutter_dynamic_icon_plus.FlutterDynamicIconPlusService"
-            android:stopWithTask="false" />
-
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
@@ -48,12 +43,28 @@
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"
             />
-            <!-- launcher intent so system knows this is the app entry point -->
+        </activity>
+
+        <!-- Only aliases are switched; real activities remain usable after upgrades. -->
+        <activity-alias
+            android:name=".DefaultLauncher"
+            android:enabled="true"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+
+        <receiver
+            android:name=".LauncherIconUpdateReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <meta-data
             android:name="flutterEmbedding"

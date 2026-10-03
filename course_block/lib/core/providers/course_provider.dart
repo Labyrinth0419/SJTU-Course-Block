@@ -79,6 +79,9 @@ class CourseProvider extends ChangeNotifier {
 
   String? _launcherIcon;
   String? get launcherIcon => _launcherIcon;
+  bool get hiddenFeaturesUnlocked =>
+      _appSettingsSnapshot.hiddenFeaturesUnlocked;
+  bool get autoUpdateEnabled => _appSettingsSnapshot.autoUpdateEnabled;
 
   final CourseScheduleManager _courseScheduleManager;
   final CourseSettingsStore _courseSettingsStore;

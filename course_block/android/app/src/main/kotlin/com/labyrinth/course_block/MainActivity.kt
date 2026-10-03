@@ -5,6 +5,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import java.io.OutputStream
 // widget support removed
 
@@ -15,6 +16,26 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val launcherIcons = LauncherIconController(this)
+        try {
+            launcherIcons.restoreIcon()
+        } catch (error: Exception) {
+            Log.w("LauncherIcon", "Unable to restore launcher during startup", error)
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "course_block/launcher_icon").setMethodCallHandler { call, result ->
+            try {
+                when (call.method) {
+                    "restoreIcon" -> result.success(launcherIcons.restoreIcon())
+                    "setIcon" -> {
+                        launcherIcons.setIcon(call.argument<String>("name"))
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            } catch (error: Exception) {
+                result.error("ICON_UPDATE_FAILED", "Unable to change launcher icon", null)
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "course_block/file").setMethodCallHandler { call, result ->
             if (call.method == "saveFile") {
                 val name = call.argument<String>("name") ?: "output"

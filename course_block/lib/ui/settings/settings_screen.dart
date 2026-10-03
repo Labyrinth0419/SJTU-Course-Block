@@ -31,98 +31,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  Future<void> _showLauncherIconDialog() async {
-    final provider = context.read<CourseProvider>();
-    final current = provider.launcherIcon;
-    List<String> icons;
-    try {
-      icons = await provider.getAvailableLauncherIcons();
-    } catch (e) {
-      debugPrint('failed to load icon list: $e');
-      icons = [];
-    }
-
-    if (!mounted) return;
-
-    final choice = await showDialog<String?>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('选择启动器图标'),
-          content: SizedBox(
-            width: 360,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildIconOptionTile(
-                    dialogContext,
-                    title: '默认',
-                    selected: current == null,
-                    value: '',
-                  ),
-                  ...icons.map(
-                    (name) => _buildIconOptionTile(
-                      dialogContext,
-                      title: name,
-                      selected: current == name,
-                      value: name,
-                      preview: _buildLauncherPreview(name),
-                    ),
-                  ),
-                  if (icons.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text('未找到可用的自定义图标'),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-
-    if (choice == null) return;
-    final nextIcon = choice.isEmpty ? null : choice;
-    if (nextIcon == current) return;
-    if (!mounted) return;
-
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        final targetLabel = nextIcon ?? '默认图标';
-        return AlertDialog(
-          title: const Text('确认更换启动器图标'),
-          content: Text(
-            '将图标切换为“$targetLabel”后，系统桌面可能不会立即刷新。'
-            '退出并重新打开应用后会完整生效。是否继续？',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('继续更换'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    await provider.updateAppSetting('app_icon_choice', nextIcon);
-    if (!mounted) return;
-    scaffoldMessenger.showSnackBar(
-      const SnackBar(content: Text('启动器图标已更新，退出并重新打开应用后会完整生效')),
-    );
-  }
-
   Future<void> _generatePerformanceTestData() async {
     final provider = context.read<CourseProvider>();
     try {
@@ -202,15 +110,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildThemePicker(context, provider),
               _buildThemeSchemePicker(context, provider),
               _buildCourseColorPalettePicker(context, provider),
-              _buildActionTile(
-                context,
-                icon: Icons.android,
-                title: '启动器图标',
-                subtitle: provider.launcherIcon == null
-                    ? '当前使用默认图标'
-                    : '当前使用 ${provider.launcherIcon}',
-                onTap: _showLauncherIconDialog,
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -469,43 +368,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onTap: onTap,
       ),
     );
-  }
-
-  Widget _buildIconOptionTile(
-    BuildContext context, {
-    required String title,
-    required bool selected,
-    required String value,
-    Widget? preview,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: selected
-            ? theme.colorScheme.secondaryContainer
-            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: ListTile(
-        leading: preview ?? const Icon(Icons.apps),
-        title: Text(title),
-        trailing: selected ? const Icon(Icons.check_circle) : null,
-        onTap: () => Navigator.of(context).pop(value),
-      ),
-    );
-  }
-
-  Widget _buildLauncherPreview(String name) {
-    try {
-      return Image.asset('assets/icons/$name.png', width: 24, height: 24);
-    } catch (_) {
-      try {
-        return Image.asset('assets/icon/$name.png', width: 24, height: 24);
-      } catch (_) {
-        return const SizedBox(width: 24, height: 24);
-      }
-    }
   }
 }
 

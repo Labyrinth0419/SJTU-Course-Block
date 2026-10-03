@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dynamic_icon_plus/flutter_dynamic_icon_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/app_theme.dart';
+import 'launcher_icon_service.dart';
 
 const Object _unsetSettingValue = Object();
 
@@ -15,18 +15,24 @@ class AppSettingsSnapshot {
     this.themeScheme = AppThemeScheme.morningMist,
     this.courseColorPalette = AppCourseColorPalette.candyBox,
     this.launcherIcon,
+    this.hiddenFeaturesUnlocked = false,
+    this.autoUpdateEnabled = true,
   });
 
   final ThemeMode themeMode;
   final AppThemeScheme themeScheme;
   final AppCourseColorPalette courseColorPalette;
   final String? launcherIcon;
+  final bool hiddenFeaturesUnlocked;
+  final bool autoUpdateEnabled;
 
   AppSettingsSnapshot copyWith({
     ThemeMode? themeMode,
     AppThemeScheme? themeScheme,
     AppCourseColorPalette? courseColorPalette,
     Object? launcherIcon = _unsetSettingValue,
+    bool? hiddenFeaturesUnlocked,
+    bool? autoUpdateEnabled,
   }) {
     return AppSettingsSnapshot(
       themeMode: themeMode ?? this.themeMode,
@@ -35,6 +41,9 @@ class AppSettingsSnapshot {
       launcherIcon: identical(launcherIcon, _unsetSettingValue)
           ? this.launcherIcon
           : launcherIcon as String?,
+      hiddenFeaturesUnlocked:
+          hiddenFeaturesUnlocked ?? this.hiddenFeaturesUnlocked,
+      autoUpdateEnabled: autoUpdateEnabled ?? this.autoUpdateEnabled,
     );
   }
 }
@@ -123,10 +132,17 @@ class ScheduleSettingsSnapshot {
 }
 
 class CourseSettingsStore {
+  CourseSettingsStore({LauncherIconService? launcherIconService})
+    : _launcherIconService = launcherIconService ?? LauncherIconService();
+
+  final LauncherIconService _launcherIconService;
+
   static const String themeModeKey = 'theme_mode';
   static const String themeSchemeKey = 'theme_scheme';
   static const String courseColorPaletteKey = 'course_color_palette';
   static const String launcherIconKey = 'app_icon_choice';
+  static const String hiddenFeaturesUnlockedKey = 'hidden_features_unlocked';
+  static const String autoUpdateEnabledKey = 'auto_update_enabled';
 
   static const String showGridLinesKey = 'show_grid_lines';
   static const String showNonCurrentWeekKey = 'show_non_current_week';
@@ -163,6 +179,8 @@ class CourseSettingsStore {
     themeSchemeKey,
     courseColorPaletteKey,
     launcherIconKey,
+    hiddenFeaturesUnlockedKey,
+    autoUpdateEnabledKey,
   };
 
   static const Set<String> _excludedLauncherIcons = {
@@ -309,13 +327,21 @@ class CourseSettingsStore {
 
   Future<AppSettingsSnapshot> loadAppSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final launcherIcon = prefs.getString(launcherIconKey);
-    if (launcherIcon != null) {
-      await _applyLauncherIcon(launcherIcon);
+    final storedIcon = prefs.get(launcherIconKey);
+    final savedIcon = storedIcon is String ? storedIcon : null;
+    var launcherIcon = savedIcon;
+    try {
+      launcherIcon = await _launcherIconService.restoreIcon(savedIcon);
+      await _setNullableString(prefs, launcherIconKey, launcherIcon);
+    } catch (_) {
+      // A cosmetic failure must not discard the rest of the saved settings.
+      debugPrint('Unable to restore launcher icon during startup');
     }
 
     return AppSettingsSnapshot(
       launcherIcon: launcherIcon,
+      hiddenFeaturesUnlocked: prefs.get(hiddenFeaturesUnlockedKey) == true,
+      autoUpdateEnabled: prefs.get(autoUpdateEnabledKey) != false,
       themeMode: _themeModeFromStorage(prefs.getString(themeModeKey)),
       themeScheme: appThemeSchemeFromStorage(prefs.getString(themeSchemeKey)),
       courseColorPalette: appCourseColorPaletteFromStorage(
@@ -393,12 +419,22 @@ class CourseSettingsStore {
         key == courseColorPaletteKey;
     var snapshot = current;
 
-    if (value == null) {
-      if (key == launcherIconKey) {
-        await prefs.remove(key);
-        snapshot = current.copyWith(launcherIcon: null);
-        await _applyLauncherIcon(null);
+    if (key == hiddenFeaturesUnlockedKey || key == autoUpdateEnabledKey) {
+      if (value is! bool) {
+        throw ArgumentError.value(value, key, 'Expected bool');
       }
+      await prefs.setBool(key, value);
+      snapshot = key == hiddenFeaturesUnlockedKey
+          ? current.copyWith(hiddenFeaturesUnlocked: value)
+          : current.copyWith(autoUpdateEnabled: value);
+    } else if (key == launcherIconKey) {
+      if (value != null && value is! String) {
+        throw ArgumentError.value(value, key, 'Expected icon name');
+      }
+      final name = value as String?;
+      await _applyLauncherIcon(name);
+      await _setNullableString(prefs, key, name);
+      snapshot = current.copyWith(launcherIcon: name);
     } else if (value is String) {
       await prefs.setString(key, value);
       switch (key) {
@@ -414,10 +450,6 @@ class CourseSettingsStore {
           snapshot = current.copyWith(
             courseColorPalette: appCourseColorPaletteFromStorage(value),
           );
-          break;
-        case launcherIconKey:
-          snapshot = current.copyWith(launcherIcon: value);
-          await _applyLauncherIcon(value);
           break;
       }
     }
@@ -528,36 +560,6 @@ class CourseSettingsStore {
     await prefs.setString(key, value);
   }
 
-  Future<void> _applyLauncherIcon(String? name) async {
-    try {
-      if (await FlutterDynamicIconPlus.supportsAlternateIcons) {
-        final fullName = name == null
-            ? null
-            : 'com.labyrinth.course_block.$name';
-        await FlutterDynamicIconPlus.setAlternateIconName(
-          iconName: fullName,
-          blacklistBrands: [
-            'vivo',
-            'VIVO',
-            'iqoo',
-            'IQOO',
-            'Xiaomi',
-            'Redmi',
-            'OPPO',
-            'OnePlus',
-          ],
-          blacklistManufactures: [
-            'vivo',
-            'VIVO',
-            'iqoo',
-            'IQOO',
-            'Xiaomi',
-            'Redmi',
-          ],
-        );
-      }
-    } catch (e) {
-      debugPrint('error setting launcher icon: $e');
-    }
-  }
+  Future<void> _applyLauncherIcon(String? name) =>
+      _launcherIconService.setIcon(name);
 }
