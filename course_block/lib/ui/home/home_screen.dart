@@ -21,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with RouteAware, WidgetsBindingObserver {
+  late final CourseProvider _listenedProvider;
   PageController? _pageController;
   bool _controllerReady = false;
   bool _routeSubscribed = false;
@@ -30,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen>
   // Set while the week change originates from a user swipe, so the provider
   // listener skips the (redundant) page-correction work for that notify.
   bool _weekChangeFromSwipe = false;
+  bool _weekPageSyncScheduled = false;
 
   @override
   void initState() {
@@ -50,7 +52,8 @@ class _HomeScreenState extends State<HomeScreen>
       });
     });
 
-    context.read<CourseProvider>().addListener(_providerListener);
+    _listenedProvider = context.read<CourseProvider>();
+    _listenedProvider.addListener(_providerListener);
   }
 
   @override
@@ -70,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    context.read<CourseProvider>().removeListener(_providerListener);
+    _listenedProvider.removeListener(_providerListener);
     if (_routeSubscribed) {
       routeObserver.unsubscribe(this);
     }
@@ -191,13 +194,13 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
-    final provider = context.read<CourseProvider>();
-    final target = provider.currentWeek - 1;
+    if (_weekPageSyncScheduled) return;
+    _weekPageSyncScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_pageController == null || !_pageController!.hasClients) {
-        return;
-      }
+      _weekPageSyncScheduled = false;
+      if (!mounted || _pageController?.hasClients != true) return;
 
+      final target = context.read<CourseProvider>().currentWeek - 1;
       final page =
           _pageController!.page ?? _pageController!.initialPage.toDouble();
       if (page.round() != target) {

@@ -92,10 +92,8 @@ class _MoreFunctionsSheet extends StatelessWidget {
       minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       child: Consumer<CourseProvider>(
         builder: (context, provider, child) {
-          final schedule = provider.currentSchedule;
-          final todayWeek = schedule == null
-              ? provider.currentWeek
-              : _resolveCurrentAcademicWeek(schedule, provider.totalWeeks);
+          final scheduleId = provider.currentSchedule?.id;
+          final todayWeek = provider.academicWeek;
 
           return ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxHeight),
@@ -111,16 +109,36 @@ class _MoreFunctionsSheet extends StatelessWidget {
                         children: [
                           _PanelTitleRow(
                             title: '周数',
-                            actionLabel: '修改当前周',
-                            onTap: () => _showWeekPickerDialog(
-                              context,
-                              provider,
-                              todayWeek,
-                            ),
+                            actionLabel: '切换显示周',
+                            onTap: () async {
+                              final week = await _showWeekPickerDialog(
+                                context,
+                                title: '切换显示周',
+                                initialWeek: provider.currentWeek,
+                                totalWeeks: provider.totalWeeks,
+                                todayWeek: todayWeek,
+                              );
+                              if (week != null && context.mounted) {
+                                provider.setCurrentWeek(week);
+                              }
+                            },
+                            secondaryActions: [
+                              (
+                                label: '校准当前周',
+                                onTap: scheduleId == null
+                                    ? null
+                                    : () => _showWeekCalibrationDialog(
+                                        context,
+                                        provider,
+                                        scheduleId,
+                                      ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 10),
                           _WeekStrip(
                             currentWeek: provider.currentWeek,
+                            todayWeek: todayWeek,
                             totalWeeks: provider.totalWeeks,
                             onChanged: (value) =>
                                 provider.setCurrentWeek(value.round()),
@@ -186,16 +204,34 @@ class _PanelTitleRow extends StatelessWidget {
     required this.title,
     required this.actionLabel,
     required this.onTap,
+    this.secondaryActions = const [],
   });
 
   final String title;
   final String actionLabel;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final List<({String label, VoidCallback? onTap})> secondaryActions;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = context.appTheme;
+    Widget actionButton(String label, VoidCallback? onPressed) => TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        foregroundColor: palette.floatingSheetAction,
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+
     return Row(
       children: [
         Text(
@@ -205,20 +241,17 @@ class _PanelTitleRow extends StatelessWidget {
             letterSpacing: -0.2,
           ),
         ),
-        const Spacer(),
-        TextButton(
-          onPressed: onTap,
-          style: TextButton.styleFrom(
-            padding: EdgeInsets.zero,
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            foregroundColor: palette.floatingSheetAction,
-          ),
-          child: Text(
-            actionLabel,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            children: [
+              for (final secondary in secondaryActions)
+                actionButton(secondary.label, secondary.onTap),
+              actionButton(actionLabel, onTap),
+            ],
           ),
         ),
       ],
@@ -229,18 +262,44 @@ class _PanelTitleRow extends StatelessWidget {
 class _WeekStrip extends StatelessWidget {
   const _WeekStrip({
     required this.currentWeek,
+    required this.todayWeek,
     required this.totalWeeks,
     required this.onChanged,
   });
 
   final int currentWeek;
+  final int? todayWeek;
   final int totalWeeks;
   final ValueChanged<double> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.appTheme;
+    final actualWeek = todayWeek;
+    final caption = switch (actualWeek) {
+      null => '浏览第 $currentWeek 周',
+      _ when actualWeek == currentWeek => '当前第 $actualWeek 周',
+      _ => '当前第 $actualWeek 周 · 浏览第 $currentWeek 周',
+    };
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSlider(context, actualWeek),
+        Padding(
+          padding: const EdgeInsets.only(left: 8, right: 8, top: 4),
+          child: Text(
+            caption,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSlider(BuildContext context, int? actualWeek) {
+    final palette = context.appTheme;
     return Container(
       height: 34,
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -271,6 +330,14 @@ class _WeekStrip extends StatelessWidget {
                 activeTrackColor: palette.weekStripBackground,
                 inactiveTrackColor: palette.weekStripBackground,
                 thumbColor: palette.weekStripThumb,
+                trackShape: actualWeek == null
+                    ? null
+                    : _CurrentWeekTrackShape(
+                        position: totalWeeks == 1
+                            ? 0
+                            : (actualWeek - 1) / (totalWeeks - 1),
+                        color: palette.weekStripAccent,
+                      ),
                 overlayColor: palette.weekStripThumb.withValues(alpha: 0.14),
                 thumbShape: const RoundSliderThumbShape(
                   enabledThumbRadius: 4.5,
@@ -283,11 +350,70 @@ class _WeekStrip extends StatelessWidget {
                 max: totalWeeks.toDouble(),
                 divisions: totalWeeks > 1 ? totalWeeks - 1 : null,
                 onChanged: onChanged,
+                semanticFormatterCallback: (value) => '浏览第 ${value.round()} 周',
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CurrentWeekTrackShape extends RoundedRectSliderTrackShape {
+  const _CurrentWeekTrackShape({required this.position, required this.color});
+
+  final double position;
+  final Color color;
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required TextDirection textDirection,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+    double additionalActiveTrackHeight = 2,
+  }) {
+    super.paint(
+      context,
+      offset,
+      parentBox: parentBox,
+      sliderTheme: sliderTheme,
+      enableAnimation: enableAnimation,
+      textDirection: textDirection,
+      thumbCenter: thumbCenter,
+      secondaryOffset: secondaryOffset,
+      isDiscrete: isDiscrete,
+      isEnabled: isEnabled,
+      additionalActiveTrackHeight: additionalActiveTrackHeight,
+    );
+    final track = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isDiscrete: isDiscrete,
+      isEnabled: isEnabled,
+    );
+    final visualPosition = textDirection == TextDirection.ltr
+        ? position
+        : 1 - position;
+    // Match the inset Flutter uses to position the discrete slider thumb.
+    final inset = isDiscrete ? track.height / 2 : 0.0;
+    final x = track.left + inset + (track.width - 2 * inset) * visualPosition;
+    final y = track.center.dy;
+    context.canvas.drawLine(
+      Offset(x, y - 8),
+      Offset(x, y + 8),
+      Paint()
+        ..color = color
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round,
     );
   }
 }
@@ -546,38 +672,29 @@ Future<void> _dismissAndRun(
   await action();
 }
 
-int _resolveCurrentAcademicWeek(Schedule schedule, int totalWeeks) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final start = DateTime(
-    schedule.startDate.year,
-    schedule.startDate.month,
-    schedule.startDate.day,
-  );
-  final diff = today.difference(start).inDays;
-  final week = (diff / 7).floor() + 1;
-  if (week < 1) return 1;
-  if (week > totalWeeks) return totalWeeks;
-  return week;
-}
-
-Future<void> _showWeekPickerDialog(
-  BuildContext context,
-  CourseProvider provider,
-  int todayWeek,
-) async {
-  var selectedWeek = provider.currentWeek;
-
-  await showDialog<void>(
+Future<int?> _showWeekPickerDialog(
+  BuildContext context, {
+  required String title,
+  required int initialWeek,
+  required int totalWeeks,
+  int? todayWeek,
+  String? description,
+}) {
+  var selectedWeek = initialWeek;
+  return showDialog<int>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        title: const Text('修改当前周'),
+        title: Text(title),
         content: SizedBox(
           width: 280,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (description != null) ...[
+                Text(description),
+                const SizedBox(height: 12),
+              ],
               Text(
                 '第 $selectedWeek 周',
                 style: Theme.of(
@@ -588,10 +705,8 @@ Future<void> _showWeekPickerDialog(
               Slider(
                 value: selectedWeek.toDouble(),
                 min: 1,
-                max: provider.totalWeeks.toDouble(),
-                divisions: provider.totalWeeks > 1
-                    ? provider.totalWeeks - 1
-                    : null,
+                max: totalWeeks.toDouble(),
+                divisions: totalWeeks > 1 ? totalWeeks - 1 : null,
                 label: '第 $selectedWeek 周',
                 onChanged: (value) {
                   setDialogState(() {
@@ -603,13 +718,9 @@ Future<void> _showWeekPickerDialog(
           ),
         ),
         actions: [
-          if (selectedWeek != todayWeek)
+          if (todayWeek != null && selectedWeek != todayWeek)
             TextButton(
-              onPressed: () {
-                setDialogState(() {
-                  selectedWeek = todayWeek;
-                });
-              },
+              onPressed: () => setDialogState(() => selectedWeek = todayWeek),
               child: const Text('回到本周'),
             ),
           TextButton(
@@ -617,16 +728,36 @@ Future<void> _showWeekPickerDialog(
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () {
-              provider.setCurrentWeek(selectedWeek);
-              Navigator.pop(dialogContext);
-            },
+            onPressed: () => Navigator.pop(dialogContext, selectedWeek),
             child: const Text('确定'),
           ),
         ],
       ),
     ),
   );
+}
+
+Future<void> _showWeekCalibrationDialog(
+  BuildContext context,
+  CourseProvider provider,
+  int scheduleId,
+) async {
+  final confirmedWeek = await _showWeekPickerDialog(
+    context,
+    title: '校准当前周',
+    initialWeek: provider.academicWeek ?? provider.currentWeek,
+    totalWeeks: provider.totalWeeks,
+    description: '校准会调整这张课表的「开学第一周周一」及对应的课程日期。',
+  );
+  if (confirmedWeek == null || !context.mounted) return;
+  try {
+    await provider.calibrateCurrentWeek(scheduleId, confirmedWeek);
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('无法保存当前周')));
+  }
 }
 
 Future<String?> _saveBytes(String filename, Uint8List bytes) async {
