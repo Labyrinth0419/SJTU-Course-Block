@@ -27,6 +27,10 @@ class WebviewLoginScreen extends StatefulWidget {
 }
 
 class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
+  static const String _mobileUserAgent =
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) '
+      'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 '
+      'Mobile/15E148 Safari/604.1 Edg/89.0.4389.72';
   static const String _graduateCookieUrl = 'https://yjs.sjtu.edu.cn/gsapp/';
   static const String _graduateCurrentTermUrl =
       'https://yjsxk.sjtu.edu.cn/yjsxkapp/sys/xsxkapp/xsxkHome/loadPublicInfo_index.do';
@@ -40,14 +44,13 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _didSave = false;
+  bool _qrMode = false;
+  bool _isChangingQrMode = false;
 
   @override
   void initState() {
     super.initState();
     _controller = WebViewController()
-      ..setUserAgent(
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1 Edg/89.0.4389.72',
-      )
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
@@ -65,6 +68,10 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
           },
           onPageFinished: (url) async {
             if (!mounted) return;
+            if (_qrMode && _isJAccountLoginPage(Uri.tryParse(url))) {
+              await _setQrMode(true);
+              if (!mounted) return;
+            }
             setState(() => _isLoading = false);
 
             if (_didSave || _isSaving) {
@@ -88,10 +95,162 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
         ),
       );
 
-    cookie_mgr.WebviewCookieManager().clearCookies().then((_) {
-      _controller.loadRequest(Uri.parse(widget.initialUrl));
-    });
+    _openLoginPage();
   }
+
+  Future<void> _openLoginPage() async {
+    try {
+      await cookie_mgr.WebviewCookieManager().clearCookies();
+      if (!mounted) return;
+      await _controller.setUserAgent(_mobileUserAgent);
+      if (!mounted) return;
+      await _controller.loadRequest(Uri.parse(widget.initialUrl));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法打开登录页面')));
+    }
+  }
+
+  bool _isJAccountLoginPage(Uri? uri) =>
+      uri != null &&
+      uri.scheme == 'https' &&
+      uri.host == 'jaccount.sjtu.edu.cn' &&
+      uri.path == '/jaccount/jalogin';
+
+  Future<void> _setQrMode(bool enabled) async {
+    setState(() => _isChangingQrMode = true);
+    var applied = false;
+    try {
+      final url = await _controller.currentUrl();
+      if (!mounted) return;
+      if (_isJAccountLoginPage(url == null ? null : Uri.tryParse(url))) {
+        final result = await _controller.runJavaScriptReturningResult(
+          _qrModeScript(enabled),
+        );
+        applied = result == true || result == 'true';
+      }
+    } catch (error) {
+      debugPrint('Unable to change jAccount QR view: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _qrMode = enabled && applied;
+          _isChangingQrMode = false;
+        });
+        if (enabled && !applied) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('当前页面无法显示扫码二维码')));
+        }
+      }
+    }
+  }
+
+  // Keep the site's original image and status nodes so its QR refresh and
+  // sign-in redirects continue to run in the same document.
+  String _qrModeScript(bool enabled) =>
+      '''
+(() => {
+  if (location.origin !== 'https://jaccount.sjtu.edu.cn' ||
+      location.pathname !== '/jaccount/jalogin') return false;
+  const qr = document.querySelector('.login-qr');
+  if (!qr || !qr.querySelector('#qr-img')) return false;
+  const originalPosition = document.getElementById('course-block-qr-style');
+  if (!$enabled) {
+    if (originalPosition) {
+      originalPosition.before(qr);
+      qr.classList.remove('course-block-qr');
+      document.documentElement.classList.remove('course-block-qr-page');
+      originalPosition.remove();
+    }
+    return true;
+  }
+  if (originalPosition) return true;
+  const style = document.createElement('style');
+  style.id = 'course-block-qr-style';
+  style.textContent = `
+    html.course-block-qr-page,
+    html.course-block-qr-page > body {
+      width: 100% !important;
+      height: 100% !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      transform: none !important;
+      zoom: 1 !important;
+      overflow: hidden !important;
+      background: white !important;
+    }
+    .course-block-qr-page body > :not(.course-block-qr) {
+      display: none !important;
+    }
+    .course-block-qr-page body > .course-block-qr {
+      position: fixed !important;
+      inset: 0 !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      transform: none !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      zoom: 1 !important;
+      margin: 0 !important;
+      padding: 12px !important;
+      box-sizing: border-box !important;
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(48px, 1fr) auto minmax(48px, 1fr);
+      justify-items: center;
+      overflow: auto;
+      background: white;
+      color: #222;
+      text-align: center;
+    }
+    .course-block-qr .qr-title { display: none !important; }
+    .course-block-qr #qr-mask {
+      grid-row: 2;
+      display: block !important;
+      position: static !important;
+      transform: none !important;
+      box-sizing: border-box !important;
+      width: 185px !important;
+      max-width: 100% !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+    }
+    .course-block-qr #qr-img {
+      display: block !important;
+      position: static !important;
+      transform: none !important;
+      width: 100% !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+    }
+    .course-block-qr .qr-tips {
+      grid-row: 3;
+      align-self: start;
+      display: block !important;
+      position: static !important;
+      max-width: 100% !important;
+      margin: 8px 0 0 !important;
+    }
+  `;
+  qr.before(style);
+  qr.classList.add('course-block-qr');
+  document.body.append(qr);
+  document.documentElement.classList.add('course-block-qr-page');
+  return true;
+})()
+''';
 
   Future<void> _trySaveUndergraduateCookies(String url) async {
     try {
@@ -346,6 +505,19 @@ class _WebviewLoginScreenState extends State<WebviewLoginScreen> {
                         ),
                       ],
                     ),
+                    if (widget.loginSystem == AcademicLoginSystem.undergraduate)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          icon: Icon(
+                            _qrMode ? Icons.arrow_back : Icons.qr_code_rounded,
+                          ),
+                          label: Text(_qrMode ? '返回登录页' : '扫码登录'),
+                          onPressed: _isLoading || _isChangingQrMode
+                              ? null
+                              : () => _setQrMode(!_qrMode),
+                        ),
+                      ),
                     const SizedBox(height: 12),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(999),
