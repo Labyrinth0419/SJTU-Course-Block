@@ -219,7 +219,8 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      context.read<CourseProvider>().loadCourses().then((_) {
+      // Brief interruptions such as screenshots should preserve the viewed week.
+      context.read<CourseProvider>().loadCourses(recalcWeek: false).then((_) {
         if (!mounted) return;
         unawaited(_syncBackgroundImage());
         WidgetsBinding.instance.addPostFrameCallback((_) {
