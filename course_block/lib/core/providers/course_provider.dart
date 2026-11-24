@@ -47,6 +47,13 @@ class CourseProvider extends ChangeNotifier {
   Schedule? get currentSchedule => _currentSchedule;
   bool get isLoading => _isLoading;
   int get currentWeek => _currentWeek;
+  int? get academicWeek {
+    final schedule = currentSchedule;
+    return schedule == null
+        ? null
+        : courseWeekForDateInTerm(schedule.startDate, _now(), totalWeeks);
+  }
+
   bool get requiresSyncTermSelection {
     final schedule = _currentSchedule;
     if (schedule == null) return true;
@@ -466,6 +473,26 @@ class CourseProvider extends ChangeNotifier {
     }
     _currentWeek = week;
     notifyListeners();
+  }
+
+  Future<void> calibrateCurrentWeek(int scheduleId, int week) async {
+    final activeSchedule = currentSchedule;
+    if (_disposed ||
+        activeSchedule == null ||
+        activeSchedule.id != scheduleId) {
+      return;
+    }
+    if (week < 1 || week > totalWeeks) {
+      throw RangeError.range(week, 1, totalWeeks, 'week');
+    }
+
+    final now = _now();
+    if (courseWeekForDate(activeSchedule.startDate, now) == week) {
+      setCurrentWeek(week);
+      return;
+    }
+    final firstMonday = courseDateForWeek(now, 2 - week, DateTime.monday);
+    await updateSchedule(activeSchedule.copyWith(startDate: firstMonday));
   }
 
   Future<void> switchSchedule(int scheduleId) async {

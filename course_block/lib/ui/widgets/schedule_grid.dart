@@ -183,9 +183,9 @@ class ScheduleGrid extends StatelessWidget {
                     (course.dayOfWeek - 1) * dayColumnWidth +
                     1 +
                     ((courseIndex[course] ?? 0) *
-                        ((dayColumnWidth - 2) / (courseTotal[course] ?? 1))),
+                        (dayColumnWidth / (courseTotal[course] ?? 1))),
                 ((course.startNode - 1) * rowHeight) + 1,
-                ((dayColumnWidth - 2) / (courseTotal[course] ?? 1)) - 2,
+                (dayColumnWidth / (courseTotal[course] ?? 1)) - 2,
                 course.step * rowHeight - 2,
               ),
             ),
